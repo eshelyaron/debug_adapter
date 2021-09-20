@@ -14,6 +14,7 @@
                            seq:positive_integer=1,
                            debugee
                           ).
+
 :- det(dap_server/1).
 dap_server(Options) :-
     option(in(In), Options),
@@ -82,18 +83,13 @@ dap_server_handled_debugee_error(S0, S) :-
     set_status_of_dap_server_state(exited, S1, S).
 
 dap_server_handled_debugee_queue(S0, S) :-
-    thread_get_message(dap_server_debugee_queue, intercepting(DebugeeThreadId, Port, Frame, Choice)),
-    dap_prolog_stopped_reason(Port, Frame, Choice, Reason, Description, S0, S1),
-    thread_property(DebugeeThreadId, system_thread_id(TheadId)),
-    dap_server_state_seq_inceremented(ServerSeq, S1, S),
-    dap_event(dap_server_out, ServerSeq, "stopped", _{reason:Reason, description:Description, threadId:TheadId}).
+    thread_get_message(dap_server_debugee_queue, Message),
+    dap_server_tracer_escalated(Message, S0, S).
 
-
-dap_prolog_stopped_reason(_Port, _Frame, _Choice, Reason, Description, S0, S) :-
-    dap_server_state_status(S0, Status),
-    (   Status = entry
-    ->  Reason = "entry", Description = "Entering debugee", S = S0
-    ).
+dap_server_tracer_escalated(stopped(ThreadId, Reason, Description), S0, S) :-
+    dap_server_state_seq_inceremented(ServerSeq, S0, S1),
+    dap_event(dap_server_out, ServerSeq, "stopped", _{reason:Reason, description:Description, threadId:ThreadId}),
+    set_status_of_dap_server_state(stopped, S1, S).
 
 :- det(dap_server_read_message/2).
 dap_server_read_message(In, Message) :-
@@ -113,6 +109,7 @@ dap_server_handled_message(Message, S0, S) :-
 dap_server_handled_request(Message, S0, S) :-
     _{ command:Command } :< Message,
     dap_server_state_status(S0, Status),
+    debug(swipl_dap, "here ~w ~w", [Status, Command]),
     dap_handle_command(Status, Command, Message, S0, S).
 
 dap_handle_command(started, "initialize", Message, S0, S) :-
@@ -131,6 +128,53 @@ dap_handle_command(ready, "configurationDone", Message, S0, S) :-
     dap_server_state_seq_inceremented(ServerSeq, S0, S1),
     dap_response(dap_server_out, ServerSeq, Seq, "configurationDone"),
     dap_configured(S1, S).
+dap_handle_command(stopped, "stackTrace", Message, S0, S) :-
+    _{ seq:Seq, arguments:Args } :< Message,
+    debug(swipl_dap, "there", []),
+    dap_server_tracer_delegated_stack_trace(Args, StackFrames, S0, S1),
+    debug(swipl_dap, "theree", []),
+    dap_server_state_seq_inceremented(ServerSeq, S1, S),
+    debug(swipl_dap, "thereee", []),
+    dap_response(dap_server_out, ServerSeq, Seq, "stackTrace", _{stackFrames:StackFrames}),
+    debug(swipl_dap, "thereeee", []).
+dap_handle_command(stopped, "threads", Message, S0, S) :-
+    debug(swipl_dap, "threads", []),
+    _{ seq:Seq } :< Message,
+    dap_server_state_debugee(S0, DebugeeThreadId),
+    thread_property(DebugeeThreadId, system_thread_id(ThreadId)),
+    (   thread_property(DebugeeThreadId, alias(ThreadName))
+    ->  true
+    ;   thread_property(DebugeeThreadId, id(ThreadNumber)),
+        number_string(ThreadNumber, ThreadName)
+    ),
+    dap_server_state_seq_inceremented(ServerSeq, S0, S),
+    dap_response(dap_server_out, ServerSeq, Seq, "threads", _{threads:[_{id:ThreadId, name:ThreadName}]}).
+
+dap_server_tracer_delegated_stack_trace(Args, StackFrames, S, S) :-
+    debug(swipl_dap, "here", []),
+    _{ threadId:ThreadId } :< Args,
+    debug(swipl_dap, "hhere", []),
+    dap_server_state_debugee(S, DebugeeThreadId),
+    debug(swipl_dap, "hhhere", []),
+    thread_send_message(DebugeeThreadId, stack_trace(ThreadId)),
+    debug(swipl_dap, "hhhhhere", []),
+    get_code(dap_server_debugee_in, C),
+    debug(swipl_dap, "hhhhhhere ~w", [C]),
+    thread_get_message(dap_server_debugee_queue, stack_trace(StackFrames0)),
+    debug(swipl_dap, "hhhhhhhere", []),
+    prolog_to_dap_stack_frames(StackFrames0, StackFrames),
+    debug(swipl_dap, "hhhhhhhhere", []).
+
+prolog_to_dap_stack_frames([H0|T0], [H|T]) :-
+    prolog_to_dap_stack_frame(H0, H),
+    prolog_to_dap_stack_frames(T0, T).
+prolog_to_dap_stack_frames([], []).
+
+prolog_to_dap_stack_frame(stack_frame(Frame, Module, PI, File, Line, Column),
+                          _{id:Frame, name:PI, source:_{name:Module, path:File}, line:Line, column:Column}).
+prolog_to_dap_stack_frame(stack_frame(Frame, _Module, PI),
+                          _{id:Frame, name:PI, line:0, column:0}).
+
 
 dap_capabilities(_, _{supportsConfigurationDoneRequest:true}).
 
@@ -153,13 +197,15 @@ dap_launched_debugee_with_arguments(Args, S0, S) :-
     set_status_of_dap_server_state(ready, S2, S).
 
 dap_configured(S0, S) :-
+    dap_server_state_debugee(S0, DebugeeThreadId),
+    retractall(user:prolog_trace_interception(_, _, _, _)),
     asserta(( user:prolog_trace_interception(Port, Frame, Choice, Action) :-
                   dap_trace_interception(Port, Frame, Choice, Action)
             )
            ),
-    dap_server_state_debugee(S0, DebugeeThreadId),
+
     thread_send_message(DebugeeThreadId, go),  % arbitrary term
-    set_status_of_dap_server_state(entry, S0, S).
+    set_status_of_dap_server_state(running, S0, S).
 
 dap_error_response(Out, ServerSeq, Seq, Command, Message) :-
     atom_json_dict(JsonString, _{seq:ServerSeq,

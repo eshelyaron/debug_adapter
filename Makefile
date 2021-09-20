@@ -19,7 +19,7 @@ all: $(BIN_OUT)
 
 $(BIN_OUT): $(SRC_FILES)
 	@mkdir $(BIN_DIR) 2>/dev/null || true
-	@$(PROLOG) -o $(BIN_OUT) -c $(SRC_DIR)/main.pl -O
+	@$(PROLOG) -o $(BIN_OUT) -c $(SRC_DIR)/main.pl
 
 clean:
 	@rm -r $(BIN_DIR) $(DOC_DIR) 2>/dev/null || true

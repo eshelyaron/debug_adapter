@@ -5,10 +5,12 @@
        ]
    ).
 
+:- use_module(dap_tracer).
 :- meta_predicate dap_debugee(0).
 
 dap_debugee(Goal) :-
     thread_get_message(_),
+    dap_tracer_start,
     catch( ( trace, (  Goal
                     -> notrace, put_code(dap_server_debugee_out, 0)
                     ;  notrace, put_code(dap_server_debugee_out, 1)
