@@ -130,13 +130,9 @@ dap_handle_command(ready, "configurationDone", Message, S0, S) :-
     dap_configured(S1, S).
 dap_handle_command(stopped, "stackTrace", Message, S0, S) :-
     _{ seq:Seq, arguments:Args } :< Message,
-    debug(swipl_dap, "there", []),
     dap_server_tracer_delegated_stack_trace(Args, StackFrames, S0, S1),
-    debug(swipl_dap, "theree", []),
     dap_server_state_seq_inceremented(ServerSeq, S1, S),
-    debug(swipl_dap, "thereee", []),
     dap_response(dap_server_out, ServerSeq, Seq, "stackTrace", _{stackFrames:StackFrames}),
-    debug(swipl_dap, "thereeee", []).
 dap_handle_command(stopped, "threads", Message, S0, S) :-
     debug(swipl_dap, "threads", []),
     _{ seq:Seq } :< Message,
@@ -149,21 +145,44 @@ dap_handle_command(stopped, "threads", Message, S0, S) :-
     ),
     dap_server_state_seq_inceremented(ServerSeq, S0, S),
     dap_response(dap_server_out, ServerSeq, Seq, "threads", _{threads:[_{id:ThreadId, name:ThreadName}]}).
+dap_handle_command(stopped, "scopes", Message, S0, S) :-
+    _{ seq:Seq, arguments:Args } :< Message,
+    dap_server_tracer_delegated_scopes(Args, Scopes, S0, S1),
+    dap_server_state_seq_inceremented(ServerSeq, S1, S),
+    dap_response(dap_server_out, ServerSeq, Seq, "scopes", _{scopes:Scopes}).
+
+dap_server_tracer_delegated_scopes(Args, Scopes, S, S) :-
+    _{ frameId:FrameId } :< Args,
+    dap_server_state_debugee(S, DebugeeThreadId),
+    thread_send_message(DebugeeThreadId, scope(FrameId)),
+    get_code(dap_server_debugee_in, 3),
+    thread_get_message(dap_server_debugee_queue, Scope0),
+    prolog_to_dap_scope(FrameId, Scope0, Scope),
+    Scopes = [Scope].
+
+prolog_to_dap_scope(FrameId,
+                    scope(File, StartLine, StartColumn, EndLine, EndColumn),
+                     _{ name               : "Locals",
+                        variablesReference : FrameId,
+                        expensive          : false,
+                        source             : _{ name : BaseName,
+                                                path : File
+                                              },
+                        line               : StartLine,
+                        column             : StartColumn,
+                        endLine            : EndLine,
+                        endColumn          : EndColumn
+                      }
+                    ) :-
+    file_base_name(File, BaseName).
 
 dap_server_tracer_delegated_stack_trace(Args, StackFrames, S, S) :-
-    debug(swipl_dap, "here", []),
     _{ threadId:ThreadId } :< Args,
-    debug(swipl_dap, "hhere", []),
     dap_server_state_debugee(S, DebugeeThreadId),
-    debug(swipl_dap, "hhhere", []),
     thread_send_message(DebugeeThreadId, stack_trace(ThreadId)),
-    debug(swipl_dap, "hhhhhere", []),
-    get_code(dap_server_debugee_in, C),
-    debug(swipl_dap, "hhhhhhere ~w", [C]),
+    get_code(dap_server_debugee_in, 3),
     thread_get_message(dap_server_debugee_queue, stack_trace(StackFrames0)),
-    debug(swipl_dap, "hhhhhhhere", []),
-    prolog_to_dap_stack_frames(StackFrames0, StackFrames),
-    debug(swipl_dap, "hhhhhhhhere", []).
+    prolog_to_dap_stack_frames(StackFrames0, StackFrames).
 
 prolog_to_dap_stack_frames([H0|T0], [H|T]) :-
     prolog_to_dap_stack_frame(H0, H),
