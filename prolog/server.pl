@@ -29,14 +29,11 @@ da_server(Options) :-
 
 :- det(da_server_loop/6).
 da_server_loop(State0, Seq0, In, Out, R, W) :-
-    debug(swipl_dap, "loopin'", []),
     wait_for_input([In, R], Inputs, infinite),
-    debug(swipl_dap, "inputs ~w", [Inputs]),
     da_server_handled_streams(In, R, Inputs, Out, W, State0, State, Seq0, Seq),
     da_server_loop(State, Seq, In, Out, R, W).
 
 da_server_handled_streams(In, R, [H|T], Out, W, State0, State, Seq0, Seq) :-
-    debug(swipl_dap, "Handling Stream ~w ~w ~w", [In, R, H]),
     da_server_handled_stream(In, R, H, Out, W, State0, State1, Seq0, Seq1),
     da_server_handled_streams(In, R, T, Out, W, State1, State, Seq1, Seq).
 da_server_handled_streams(_, _, [], _, _, State, State, Seq, Seq).
@@ -45,18 +42,14 @@ da_server_handled_stream(In, _R, In, Out, W, State0, State, Seq0, Seq) :-
     da_server_read_content(In, Content0),
     del_dict(seq,  Content0, ClientSeq, Content1),
     del_dict(type, Content1, Type, Message),
-    debug(swipl_dap, "~w, ~w", [ClientSeq, Type]),
     da_server_handled_message(Type, ClientSeq, Message, Out, W, State0, State, Seq0, Seq).
 da_server_handled_stream(_In, R, R, Out, _, State0, State, Seq0, Seq) :-
     get_code(R, _),
-    debug(swipl_dap, "handle debugge messages", []),
     da_server_handled_debugee_messages(Out, State0, State, Seq0, Seq).
 
 da_server_handled_debugee_messages(Out, State0, State, Seq0, Seq) :-
-    debug(swipl_dap, "handling debugge message", []),
     (   thread_peek_message(_)
     ->  thread_get_message(DebugeeThreadId-Message),
-        debug(swipl_dap, "handling debugge message ~w ~w", [DebugeeThreadId, Message]),
         da_server_handled_debugee_message(DebugeeThreadId, Message, Out, State0, State1, Seq0, Seq1),
         da_server_handled_debugee_messages(Out, State1, State, Seq1, Seq)
     ;   State = State0,
@@ -95,6 +88,13 @@ da_server_handled_debugee_message(_DebugeeThreadId,
                                   exited(ExitCode),
                                   Out, State, State, Seq0, Seq) :-
     da_server_emitted_event(Out, Seq0, "exited", _{exitCode:ExitCode}),
+    succ(Seq0, Seq).
+da_server_handled_debugee_message(DebugeeThreadId,
+                                  thread_exited,
+                                  Out, State, State, Seq0, Seq) :-
+    da_server_emitted_event(Out, Seq0, "thread", _{ reason   : "exited",
+                                                    threadId : DebugeeThreadId
+                                                  }),
     succ(Seq0, Seq).
 
 
@@ -143,7 +143,6 @@ da_server_read_content(In, Content) :-
 
 da_server_handled_message("request", RequestSeq, Message0, Out, W, State0, State, Seq0, Seq) :-
     del_dict(command, Message0, Command, Message),
-    debug(swipl_dap, "~w", Command),
     da_server_command(Command, RequestSeq, Message, Out, W, State0, State, Seq0, Seq).
 
 da_server_command("initialize", RequestSeq, Message, Out, _W, State, State, Seq0, Seq) :-
@@ -156,12 +155,9 @@ da_server_command("initialize", RequestSeq, Message, Out, _W, State, State, Seq0
     succ(Seq1, Seq).
 da_server_command("launch", RequestSeq, Message, Out, W, State, [Debugee|State], Seq0, Seq) :-
     _{ arguments:Args } :< Message,
-    debug(swipl_dap, "launch args ~w", [Args]),
     da_launched(Args, W, Debugee),
-    debug(swipl_dap, "launched ~w", [Debugee]),
     da_server_emitted_response(Out, Seq0, RequestSeq, "launch"),
-    succ(Seq0, Seq),
-    debug(swipl_dap, "launch unifying", []).
+    succ(Seq0, Seq).
 da_server_command("configurationDone", RequestSeq, _Message, Out, _W, State, State, Seq0, Seq) :-
     da_configured(State),
     da_server_emitted_response(Out, Seq0, RequestSeq, "configurationDone"),
@@ -205,12 +201,9 @@ da_initialized(_).
 da_launched(Args, W, debugee(PrologThreadId, ThreadId, Goal)) :-
     _{ module: ModulePath, goal: GoalString } :< Args,
     term_string(Goal, GoalString),
-    debug(swipl_dap, "launching goal ~w", [Goal]),
     thread_self(ServerThreadId),
     thread_create(da_debugee(ModulePath, Goal, ServerThreadId, W), PrologThreadId),
-    debug(swipl_dap, "created thread ~w", [PrologThreadId]),
-    thread_property(PrologThreadId, id(ThreadId)),
-    debug(swipl_dap, "created thread s ~w", [ThreadId]).
+    thread_property(PrologThreadId, id(ThreadId)).
 
 da_configured([debugee(_, ThreadId, _)|T]) :-
     thread_send_message(ThreadId, configuration_done),

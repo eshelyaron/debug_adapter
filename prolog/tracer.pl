@@ -13,8 +13,8 @@
 prolog:open_source_hook(Path, Stream, _Options) :-
     (   da_debugee_server(ServerThreadId, ServerInterruptHandle)
     ->  (   source_file(Path)
-        ->  da_debugee_emitted_message(loaded_source("changed", Path), ServerThreadId, ServerInterruptHandle)
-        ;   da_debugee_emitted_message(loaded_source("new", Path), ServerThreadId, ServerInterruptHandle)
+        ->  da_debugee_emitted_message(loaded_source("new", Path), ServerThreadId, ServerInterruptHandle)
+        ;   da_debugee_emitted_message(loaded_source("changed", Path), ServerThreadId, ServerInterruptHandle)
         )
     ;   true
     ),
@@ -29,7 +29,7 @@ da_debugee(ModulePath, Goal, ServerThreadId, ServerInterruptHandle) :-
     use_module(AbsModulePath),
     module_property(Module, file(AbsModulePath)),
     qualify(Goal, Module, QGoal),
-    da_trace(QGoal, ServerInterruptHandle, ServerInterruptHandle).
+    da_trace(QGoal, ServerThreadId, ServerInterruptHandle).
 
 da_debugee_emitted_message(Message, ServerThreadId, ServerInterruptHandle) :-
     thread_self(DebugeePrologThreadId),
@@ -48,18 +48,11 @@ da_trace(Goal, ServerThreadId, ServerInterruptHandle) :-
     ->  true
     ;   OldFlag = false
     ),
-    debug(swipl_dap, "old flag ~w", [OldFlag]),
     set_prolog_flag(gui_tracer, true),
-    debug(swipl_dap, "new flag true", []),
-    retractall(user:prolog_trace_interception(_, _, _, _)),
-    asserta((
-        user:prolog_trace_interception(Port, Frame, Choice, Action) :-
-            debug(swipl_dap, "Interception", []),
-            debug(swipl_dap, "Interception2", []),
-            debug(swipl_dap, "Interception1 ~w ~w", [main, w]),
-            da_trace_interception(Port, Frame, Choice, Action, main, w)
-    )),
-    debug(swipl_dap, "asserted hook", []),
+    asserta((user:prolog_trace_interception(Port, Frame, Choice, Action) :-
+                 debug(swipl_dap, "intercepting ~w ~w", [Port, Frame]),
+                 da_trace_interception(Port, Frame, Choice, Action)
+            ), Ref),
     trace,
     catch((  Goal
           -> ExitCode = 0
@@ -69,17 +62,19 @@ da_trace(Goal, ServerThreadId, ServerInterruptHandle) :-
           ExitCode = 2
          ),
     notrace,
-    retractall(user:prolog_trace_interception(_, _, _, _)),
+    erase(Ref),
     debug(swipl_dap, "tracer cleanup", []),
     set_prolog_flag(gui_tracer, OldFlag),
     da_debugee_exited(ExitCode, ServerThreadId, ServerInterruptHandle).
 
+:- det(da_debugee_exited/3).
 da_debugee_exited(R, S, W) :-
+    da_debugee_emitted_message(thread_exited, S, W),
     da_debugee_emitted_message(exited(R), S, W).
 
-:- det(da_trace_interception/6).
-da_trace_interception(Port, Frame, Choice, Action, ServerThreadId, ServerInterruptHandle) :-
-    debug(swipl_dap, "da_trace_interception", []),
+:- det(da_trace_interception/4).
+da_trace_interception(Port, Frame, Choice, Action) :-
+    once(da_debugee_server(ServerThreadId, ServerInterruptHandle)),
     (   da_tracer_last_action(LastAction)
     ->  prolog_dap_stopped_reason(Port, LastAction, Reason, Description, Text)
     ;   Reason = "entry", Description = "Paused on goal entry", Text = null
@@ -90,7 +85,6 @@ da_trace_interception(Port, Frame, Choice, Action, ServerThreadId, ServerInterru
     asserta(da_tracer_last_action(Action)).
 
 da_tracer_loop(Port, Frame, Choice, Action, ServerThreadId, ServerInterruptHandle) :-
-    debug(swipl_dap, "da_tracer_loop", []),
     thread_get_message(Message),
     da_tracer_handled_message(Message, Port, Frame, Choice, Action0, ServerThreadId, ServerInterruptHandle),
     (   Action0 = loop
@@ -99,10 +93,9 @@ da_tracer_loop(Port, Frame, Choice, Action, ServerThreadId, ServerInterruptHandl
     ).
 
 :- det(prolog_dap_stopped_reason/5).
-prolog_dap_stopped_reason(exception(E), _, "exception", "Paused on exception", Text) :-
-    !,
-    term_string(E, Text).
-prolog_dap_stopped_reason(_, continue, "step", "Paused after stepping in", null).
+prolog_dap_stopped_reason(Port, _, Reason, null, null) :-
+    functor(Port, Atom, _),
+    atom_string(Atom, Reason).
 
 :- det(da_tracer_handled_message/7).
 da_tracer_handled_message(stack_trace(RequestId), _Port, Frame, _Choice, loop, S, W) :-
