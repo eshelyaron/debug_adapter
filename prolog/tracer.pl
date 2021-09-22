@@ -5,7 +5,7 @@
        ]
    ).
 
-:- dynamic da_debugee_server/2.
+:- thread_local da_debugee_server/2.
 :- thread_local da_tracer_last_action/1.
 
 :- multifile prolog:open_source_hook/3.
@@ -55,9 +55,6 @@ da_trace(Goal, ServerThreadId, ServerInterruptHandle) :-
     asserta((
         user:prolog_trace_interception(Port, Frame, Choice, Action) :-
             debug(swipl_dap, "Interception", []),
-%            (   da_debugee_server(ServerThreadId, ServerInterruptHandle)
-%            ->  true
-%            ;
             debug(swipl_dap, "Interception2", []),
             debug(swipl_dap, "Interception1 ~w ~w", [main, w]),
             da_trace_interception(Port, Frame, Choice, Action, main, w)
@@ -101,14 +98,18 @@ da_tracer_loop(Port, Frame, Choice, Action, ServerThreadId, ServerInterruptHandl
     ;   Action  = Action0
     ).
 
+:- det(prolog_dap_stopped_reason/5).
 prolog_dap_stopped_reason(exception(E), _, "exception", "Paused on exception", Text) :-
+    !,
     term_string(E, Text).
+prolog_dap_stopped_reason(_, continue, "step", "Paused after stepping in", null).
 
 :- det(da_tracer_handled_message/7).
 da_tracer_handled_message(stack_trace(RequestId), _Port, Frame, _Choice, loop, S, W) :-
     current_prolog_flag(backtrace_depth, Depth),
     da_stack_frames(Depth, Frame, call, StackFrames),
     da_debugee_emitted_message(stack_trace(RequestId, StackFrames), S, W).
+da_tracer_handled_message(step_in, _Port, _Frame, _Choice, continue, _S, _W).
 
 da_stack_frames(0, _, _, []) :- !.
 da_stack_frames(Depth, F, PC, Frames) :-

@@ -132,7 +132,7 @@ dap_handle_command(stopped, "stackTrace", Message, S0, S) :-
     _{ seq:Seq, arguments:Args } :< Message,
     dap_server_tracer_delegated_stack_trace(Args, StackFrames, S0, S1),
     dap_server_state_seq_inceremented(ServerSeq, S1, S),
-    dap_response(dap_server_out, ServerSeq, Seq, "stackTrace", _{stackFrames:StackFrames}),
+    dap_response(dap_server_out, ServerSeq, Seq, "stackTrace", _{stackFrames:StackFrames}).
 dap_handle_command(stopped, "threads", Message, S0, S) :-
     debug(swipl_dap, "threads", []),
     _{ seq:Seq } :< Message,
@@ -150,20 +150,50 @@ dap_handle_command(stopped, "scopes", Message, S0, S) :-
     dap_server_tracer_delegated_scopes(Args, Scopes, S0, S1),
     dap_server_state_seq_inceremented(ServerSeq, S1, S),
     dap_response(dap_server_out, ServerSeq, Seq, "scopes", _{scopes:Scopes}).
+dap_handle_command(stopped, "variables", Message, S0, S) :-
+    _{ seq:Seq, arguments:Args } :< Message,
+    dap_server_tracer_delegated_variables(Args, Variables, S0, S1),
+    dap_server_state_seq_inceremented(ServerSeq, S1, S),
+    dap_response(dap_server_out, ServerSeq, Seq, "variables", _{variables:Variables}).
+
+dap_server_tracer_delegated_variables(Args, Variables, S, S) :-
+    _{ variablesReference: VariablesReference } :< Args,
+    dap_server_state_debugee(S, DebugeeThreadId),
+    LorA is VariablesReference /\ 1,
+    FrameId is VariablesReference >> 1,
+    (   LorA = 0
+    ->  Message = locals(FrameId)
+    ;   Message = arguments(FrameId)
+    ),
+    thread_send_message(DebugeeThreadId, Message),
+    get_code(dap_server_debugee_in, 3),
+    thread_get_message(dap_server_debugee_queue, Variables0),
+    prolog_to_dap_variables(Variables0, Variables).
+
+prolog_to_dap_variables([H0|T0], [H|T]) :-
+    prolog_to_dap_variable(H0, H),
+    prolog_to_dap_variables(T0, T).
+
+prolog_to_dap_variable(Var=Val,
+                       _{ name  : VarString,
+                          value : ValString
+                        }
+                      ) :-
+    term_string(Var, VarString),
+    term_string(Val, ValString).
 
 dap_server_tracer_delegated_scopes(Args, Scopes, S, S) :-
     _{ frameId:FrameId } :< Args,
     dap_server_state_debugee(S, DebugeeThreadId),
     thread_send_message(DebugeeThreadId, scope(FrameId)),
     get_code(dap_server_debugee_in, 3),
-    thread_get_message(dap_server_debugee_queue, Scope0),
-    prolog_to_dap_scope(FrameId, Scope0, Scope),
-    Scopes = [Scope].
+    thread_get_message(dap_server_debugee_queue, Scopes0),
+    prolog_to_dap_scopes(FrameId, Scopes0, Scopes).
 
-prolog_to_dap_scope(FrameId,
-                    scope(File, StartLine, StartColumn, EndLine, EndColumn),
+prolog_to_dap_scopes(FrameId,
+                    locals(File, StartLine, StartColumn, EndLine, EndColumn),
                      _{ name               : "Locals",
-                        variablesReference : FrameId,
+                        variablesReference : VariablesReference,
                         expensive          : false,
                         source             : _{ name : BaseName,
                                                 path : File
@@ -174,7 +204,18 @@ prolog_to_dap_scope(FrameId,
                         endColumn          : EndColumn
                       }
                     ) :-
+    !,
+    VariablesReference is FrameId << 1,
     file_base_name(File, BaseName).
+prolog_to_dap_scope(FrameId,
+                    scope(foreign),
+                    _{ name               : "Arguments",
+                       variablesReference : VariablesReference,
+                       expensive          : false
+                     }
+                   ) :-
+    VariablesReference is (FrameId << 1) + 1.
+
 
 dap_server_tracer_delegated_stack_trace(Args, StackFrames, S, S) :-
     _{ threadId:ThreadId } :< Args,

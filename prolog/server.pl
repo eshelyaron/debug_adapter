@@ -166,13 +166,18 @@ da_server_command("threads", RequestSeq, _Message, Out, _W, State, State, Seq0, 
     succ(Seq0, Seq).
 da_server_command("stackTrace", RequestSeq, Message, _Out, _W, State, State, Seq, Seq) :-
     _{ arguments:Args } :< Message,
-    _{ threadId:SystemThreadId } :< Args,
-%    memberchk(debugee(PrologThreadId, SystemThreadId, _), State),
-    thread_send_message(SystemThreadId, stack_trace(RequestSeq)).
+    _{ threadId:ThreadId } :< Args,
+    thread_send_message(ThreadId, stack_trace(RequestSeq)).
+da_server_command("stepIn", RequestSeq, Message, Out, _W, State, State, Seq0, Seq) :-
+    _{ arguments:Args } :< Message,
+    _{ threadId:ThreadId } :< Args,
+    da_server_emitted_response(Out, Seq0, RequestSeq, "stepIn"),
+    succ(Seq0, Seq),
+    thread_send_message(ThreadId, step_in).
 
-prolog_dap_thread(debugee(PrologThreadId, SystemThreadId, _),
+prolog_dap_thread(debugee(PrologThreadId, ThreadId, _),
                   _{ name : Name,
-                     id   : SystemThreadId
+                     id   : ThreadId
                    }
                  ) :-
     (   thread_property(PrologThreadId, alias(Name0)), !
@@ -184,18 +189,18 @@ da_server_capabilities(_{supportsConfigurationDoneRequest: true}).
 
 da_initialized(_).
 
-da_launched(Args, W, debugee(PrologThreadId, SystemThreadId, Goal)) :-
+da_launched(Args, W, debugee(PrologThreadId, ThreadId, Goal)) :-
     _{ module: ModulePath, goal: GoalString } :< Args,
     term_string(Goal, GoalString),
     debug(swipl_dap, "launching goal ~w", [Goal]),
     thread_self(ServerThreadId),
     thread_create(da_debugee(ModulePath, Goal, ServerThreadId, W), PrologThreadId),
     debug(swipl_dap, "created thread ~w", [PrologThreadId]),
-    thread_property(PrologThreadId, id(SystemThreadId)),
-    debug(swipl_dap, "created thread s ~w", [SystemThreadId]).
+    thread_property(PrologThreadId, id(ThreadId)),
+    debug(swipl_dap, "created thread s ~w", [ThreadId]).
 
-da_configured([debugee(_, SystemThreadId, _)|T]) :-
-    thread_send_message(SystemThreadId, configuration_done),
+da_configured([debugee(_, ThreadId, _)|T]) :-
+    thread_send_message(ThreadId, configuration_done),
     da_configured(T).
 da_configured([]).
 
