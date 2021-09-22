@@ -91,6 +91,12 @@ da_server_handled_debugee_message(_DebugeeThreadId,
     maplist(prolog_dap_stack_frame, StackFrames0, StackFrames),
     da_server_emitted_response(Out, Seq0, RequestSeq, "stackTrace", _{stackFrames:StackFrames}),
     succ(Seq0, Seq).
+da_server_handled_debugee_message(_DebugeeThreadId,
+                                  exited(ExitCode),
+                                  Out, State, State, Seq0, Seq) :-
+    da_server_emitted_event(Out, Seq0, "exited", _{exitCode:ExitCode}),
+    succ(Seq0, Seq).
+
 
 prolog_dap_stack_frame(stack_frame(Id, Name, 0, null, _, _, _, _),  % foreign predicate
                        _{ id     : Id,
@@ -164,16 +170,23 @@ da_server_command("threads", RequestSeq, _Message, Out, _W, State, State, Seq0, 
     maplist(prolog_dap_thread, State, Threads),
     da_server_emitted_response(Out, Seq0, RequestSeq, "threads", _{threads:Threads}),
     succ(Seq0, Seq).
-da_server_command("stackTrace", RequestSeq, Message, _Out, _W, State, State, Seq, Seq) :-
+da_server_command("stackTrace", RequestSeq, Message, Out, _W, State, State, Seq0, Seq) :-
     _{ arguments:Args } :< Message,
     _{ threadId:ThreadId } :< Args,
-    thread_send_message(ThreadId, stack_trace(RequestSeq)).
+    catch((thread_send_message(ThreadId, stack_trace(RequestSeq)), Seq = Seq0),
+          _Catcher,
+          (da_server_emitted_error(Out, Seq0, RequestSeq, "stackTrace", null), succ(Seq0, Seq))
+         ).
 da_server_command("stepIn", RequestSeq, Message, Out, _W, State, State, Seq0, Seq) :-
     _{ arguments:Args } :< Message,
     _{ threadId:ThreadId } :< Args,
     da_server_emitted_response(Out, Seq0, RequestSeq, "stepIn"),
     succ(Seq0, Seq),
     thread_send_message(ThreadId, step_in).
+da_server_command("disconnect", RequestSeq, _Message, Out, _W, State, State, Seq0, Seq) :-
+    da_server_emitted_response(Out, Seq0, RequestSeq, "disconnect"),
+    succ(Seq0, Seq),
+    halt.
 
 prolog_dap_thread(debugee(PrologThreadId, ThreadId, _),
                   _{ name : Name,

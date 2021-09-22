@@ -5,7 +5,7 @@
 ;; Author: Eshel Yaron <eshelshay.yaron@gmail.com>
 ;; Keywords: languages
 
-;; Version: 0.1
+;; Version: 0.1.0
 
 ;;; Commentary:
 

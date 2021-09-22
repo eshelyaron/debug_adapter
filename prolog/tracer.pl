@@ -62,17 +62,17 @@ da_trace(Goal, ServerThreadId, ServerInterruptHandle) :-
     debug(swipl_dap, "asserted hook", []),
     trace,
     catch((  Goal
-          -> ExitReason = "exit"
-          ;  ExitReason = "fail"
+          -> ExitCode = 0
+          ;  ExitCode = 1
           ),
           _Catcher,
-          ExitReason = "exception"
+          ExitCode = 2
          ),
     notrace,
     retractall(user:prolog_trace_interception(_, _, _, _)),
     debug(swipl_dap, "tracer cleanup", []),
     set_prolog_flag(gui_tracer, OldFlag),
-    da_debugee_exited(ExitReason, ServerThreadId, ServerInterruptHandle).
+    da_debugee_exited(ExitCode, ServerThreadId, ServerInterruptHandle).
 
 da_debugee_exited(R, S, W) :-
     da_debugee_emitted_message(exited(R), S, W).
