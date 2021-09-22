@@ -2,7 +2,7 @@
 
 :- initialization(main, main).
 
-:- use_module(dap_server).
+:- use_module(server).
 
 main(Argv) :-
     OptsSpec =
@@ -37,5 +37,5 @@ main(Argv) :-
     ; set_prolog_flag(toplevel_prompt, ''),
       current_input(In),
       current_output(Out),
-      dap_server([in(In), out(Out)])
+      da_server([in(In), out(Out)])
     ).
