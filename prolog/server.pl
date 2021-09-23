@@ -5,8 +5,8 @@
        ]
    ).
 
-:- use_module(library(http/json)).
 :- use_module(tracer).
+:- use_module(protocol).
 
 :- det(da_server/1).
 da_server(Options) :-
@@ -39,9 +39,9 @@ da_server_handled_streams(In, R, [H|T], Out, W, State0, State, Seq0, Seq) :-
 da_server_handled_streams(_, _, [], _, _, State, State, Seq, Seq).
 
 da_server_handled_stream(In, _R, In, Out, W, State0, State, Seq0, Seq) :-
-    da_server_read_content(In, Content0),
-    del_dict(seq,  Content0, ClientSeq, Content1),
-    del_dict(type, Content1, Type, Message),
+    dap_read(In, Message0),
+    del_dict(seq,  Message0, ClientSeq, Message1),
+    del_dict(type, Message1, Type, Message),
     da_server_handled_message(Type, ClientSeq, Message, Out, W, State0, State, Seq0, Seq).
 da_server_handled_stream(_In, R, R, Out, _, State0, State, Seq0, Seq) :-
     get_code(R, _),
@@ -60,7 +60,7 @@ da_server_handled_debugee_message(_DebugeeThreadId,
                                   loaded_source(Reason, SourcePath),
                                   Out, State, State, Seq0, Seq) :-
     file_base_name(SourcePath, BaseName),
-    da_server_emitted_event(Out, Seq0, "loadedSource", _{ reason : Reason,
+    dap_event(Out, Seq0, "loadedSource", _{ reason : Reason,
                                                           source : _{ name : BaseName,
                                                                       path : SourcePath
                                                                     }
@@ -70,7 +70,7 @@ da_server_handled_debugee_message(_DebugeeThreadId,
 da_server_handled_debugee_message(DebugeeThreadId,
                                   stopped(Reason, Description, Text, BreakpointIds),
                                   Out, State, State, Seq0, Seq) :-
-    da_server_emitted_event(Out, Seq0, "stopped", _{ threadId         : DebugeeThreadId,
+    dap_event(Out, Seq0, "stopped", _{ threadId         : DebugeeThreadId,
                                                      reason           : Reason,
                                                      description      : Description,
                                                      text             : Text,
@@ -82,17 +82,17 @@ da_server_handled_debugee_message(_DebugeeThreadId,
                                   stack_trace(RequestSeq, StackFrames0),
                                   Out, State, State, Seq0, Seq) :-
     maplist(prolog_dap_stack_frame, StackFrames0, StackFrames),
-    da_server_emitted_response(Out, Seq0, RequestSeq, "stackTrace", _{stackFrames:StackFrames}),
+    dap_response(Out, Seq0, RequestSeq, "stackTrace", _{stackFrames:StackFrames}),
     succ(Seq0, Seq).
 da_server_handled_debugee_message(_DebugeeThreadId,
                                   exited(ExitCode),
                                   Out, State, State, Seq0, Seq) :-
-    da_server_emitted_event(Out, Seq0, "exited", _{exitCode:ExitCode}),
+    dap_event(Out, Seq0, "exited", _{exitCode:ExitCode}),
     succ(Seq0, Seq).
 da_server_handled_debugee_message(DebugeeThreadId,
                                   thread_exited,
                                   Out, State, State, Seq0, Seq) :-
-    da_server_emitted_event(Out, Seq0, "thread", _{ reason   : "exited",
+    dap_event(Out, Seq0, "thread", _{ reason   : "exited",
                                                     threadId : DebugeeThreadId
                                                   }),
     succ(Seq0, Seq).
@@ -132,15 +132,6 @@ prolog_dap_stack_frame(stack_frame(Id, Name, Ref, Path, SL, SC, EL, EC),
                       ) :-
     file_base_name(Path, BaseName).
 
-:- det(da_server_read_content/2).
-da_server_read_content(In, Content) :-
-    read_line_to_string(In, Line),
-    sub_string(Line, 16, _, 0, ContentLengthString), % string_length("Content-Length: ", 16).
-    number_string(ContentLength, ContentLengthString),
-    read_line_to_string(In, ""),
-    read_string(In, ContentLength, Serialized),
-    atom_json_dict(Serialized, Content, []).
-
 da_server_handled_message("request", RequestSeq, Message0, Out, W, State0, State, Seq0, Seq) :-
     del_dict(command, Message0, Command, Message),
     da_server_command(Command, RequestSeq, Message, Out, W, State0, State, Seq0, Seq).
@@ -148,39 +139,39 @@ da_server_handled_message("request", RequestSeq, Message0, Out, W, State0, State
 da_server_command("initialize", RequestSeq, Message, Out, _W, State, State, Seq0, Seq) :-
     _{ arguments:Args } :< Message,
     da_server_capabilities(Capabilities),
-    da_server_emitted_response(Out, Seq0, RequestSeq, "initialize", Capabilities),
+    dap_response(Out, Seq0, RequestSeq, "initialize", Capabilities),
     succ(Seq0, Seq1),
     da_initialized(Args),
-    da_server_emitted_event(Out, Seq1, "initialized"),
+    dap_event(Out, Seq1, "initialized"),
     succ(Seq1, Seq).
 da_server_command("launch", RequestSeq, Message, Out, W, State, [Debugee|State], Seq0, Seq) :-
     _{ arguments:Args } :< Message,
     da_launched(Args, W, Debugee),
-    da_server_emitted_response(Out, Seq0, RequestSeq, "launch"),
+    dap_response(Out, Seq0, RequestSeq, "launch"),
     succ(Seq0, Seq).
 da_server_command("configurationDone", RequestSeq, _Message, Out, _W, State, State, Seq0, Seq) :-
     da_configured(State),
-    da_server_emitted_response(Out, Seq0, RequestSeq, "configurationDone"),
+    dap_response(Out, Seq0, RequestSeq, "configurationDone"),
     succ(Seq0, Seq).
 da_server_command("threads", RequestSeq, _Message, Out, _W, State, State, Seq0, Seq) :-
     maplist(prolog_dap_thread, State, Threads),
-    da_server_emitted_response(Out, Seq0, RequestSeq, "threads", _{threads:Threads}),
+    dap_response(Out, Seq0, RequestSeq, "threads", _{threads:Threads}),
     succ(Seq0, Seq).
 da_server_command("stackTrace", RequestSeq, Message, Out, _W, State, State, Seq0, Seq) :-
     _{ arguments:Args } :< Message,
     _{ threadId:ThreadId } :< Args,
     catch((thread_send_message(ThreadId, stack_trace(RequestSeq)), Seq = Seq0),
           _Catcher,
-          (da_server_emitted_error(Out, Seq0, RequestSeq, "stackTrace", null), succ(Seq0, Seq))
+          (dap_error(Out, Seq0, RequestSeq, "stackTrace", null), succ(Seq0, Seq))
          ).
 da_server_command("stepIn", RequestSeq, Message, Out, _W, State, State, Seq0, Seq) :-
     _{ arguments:Args } :< Message,
     _{ threadId:ThreadId } :< Args,
-    da_server_emitted_response(Out, Seq0, RequestSeq, "stepIn"),
+    dap_response(Out, Seq0, RequestSeq, "stepIn"),
     succ(Seq0, Seq),
     thread_send_message(ThreadId, step_in).
 da_server_command("disconnect", RequestSeq, _Message, Out, _W, State, State, Seq0, Seq) :-
-    da_server_emitted_response(Out, Seq0, RequestSeq, "disconnect"),
+    dap_response(Out, Seq0, RequestSeq, "disconnect"),
     succ(Seq0, Seq),
     halt.
 
@@ -209,44 +200,3 @@ da_configured([debugee(_, ThreadId, _)|T]) :-
     thread_send_message(ThreadId, configuration_done),
     da_configured(T).
 da_configured([]).
-
-da_server_emitted_response(Out, Seq, RequestSeq, Command) :-
-    da_server_emitted_response(Out, Seq, RequestSeq, Command, null).
-
-da_server_emitted_response(Out, Seq, RequestSeq, Command, Body) :-
-    da_server_emitted_response(Out, Seq, RequestSeq, Command, true, null, Body).
-
-da_server_emitted_response(Out, Seq, RequestSeq, Command, Success, Message, Body) :-
-    da_server_emitted_message(Out, Seq, "response", _{ request_seq: RequestSeq,
-                                                       success    : Success,
-                                                       command    : Command,
-                                                       message    : Message,
-                                                       body       : Body
-                                                     }).
-
-da_server_emitted_event(Out, Seq, Event) :-
-    da_server_emitted_event(Out, Seq, Event, null).
-
-da_server_emitted_event(Out, Seq, Event, Body) :-
-    da_server_emitted_message(Out, Seq, "event", _{ event: Event,
-                                                    body : Body
-                                                  }
-                             ).
-
-da_server_emitted_error(Out, Seq, RequestSeq, Command, Message) :-
-    da_server_emitted_response(Out, Seq, RequestSeq, Command, false, Message, null).
-
-da_server_emitted_message(Out, Seq, Type, Rest) :-
-    put_dict(_{ seq : Seq,
-                type: Type
-              },
-             Rest,
-             Message
-            ),
-    atom_json_dict(Serialized, Message, []),
-    da_server_emitted_serialized_content(Out, Serialized).
-
-da_server_emitted_serialized_content(Out, Content) :-
-    string_length(Content, ContentLength),
-    format(Out, "Content-Length: ~w\r\n\r\n", [ContentLength]),
-    format(Out, "~w", Content).
