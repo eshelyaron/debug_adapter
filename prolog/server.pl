@@ -29,7 +29,9 @@ da_server(Options) :-
 
 :- det(da_server_loop/6).
 da_server_loop(State0, Seq0, In, Out, R, W) :-
+    debug(dap(server), "Waiting", []),
     wait_for_input([In, R], Inputs, infinite),
+    debug(dap(server), "Got something", []),
     da_server_handled_streams(In, R, Inputs, Out, W, State0, State, Seq0, Seq),
     da_server_loop(State, Seq, In, Out, R, W).
 
@@ -173,7 +175,7 @@ da_server_command("stepIn", RequestSeq, Message, Out, _W, State, State, Seq0, Se
 da_server_command("disconnect", RequestSeq, _Message, Out, _W, State, State, Seq0, Seq) :-
     dap_response(Out, Seq0, RequestSeq, "disconnect"),
     succ(Seq0, Seq),
-    halt.
+    thread_exit(0).
 
 prolog_dap_thread(debugee(PrologThreadId, ThreadId, _),
                   _{ name : Name,
