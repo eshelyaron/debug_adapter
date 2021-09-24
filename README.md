@@ -2,11 +2,18 @@
 This repository hosts the development of [DAP](https://microsoft.github.io/debug-adapter-protocol/) for [SWI-Prolog](https://www.swi-prolog.org/), written in Prolog.
 
 ## Installation
-Make sure you have SWI-Prolog (the `swipl` executable) installed, and run:
+Make sure you have SWI-Prolog (the `swipl` executable) installed, and run the following commands in the root of this repository to build the DAP server at `bin/debug_adapter`:
 ```sh
 $ make
-$ make install
+$ make check
 ```
+
+If you're using GNU Emacs, load `elisp/dap-swi-prolog.el` and add the following lines to your `init.el`:
+```elisp
+(require 'dap-swi-prolog)
+```
+
+Now run `M-x dap-debug` in a Prolog buffer and have fun.
 
 ## Status
 Work in progress, see [Roadmap](#roadmap)
