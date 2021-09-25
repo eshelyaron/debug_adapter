@@ -203,6 +203,12 @@ da_server_command("stepIn", RequestSeq, Message, Out, _W, State, State, Seq0, Se
     dap_response(Out, Seq0, RequestSeq, "stepIn"),
     succ(Seq0, Seq),
     thread_send_message(ThreadId, step_in).
+da_server_command("continue", RequestSeq, Message, Out, _W, State, State, Seq0, Seq) :-
+    _{ arguments:Args } :< Message,
+    _{ threadId:ThreadId } :< Args,
+    dap_response(Out, Seq0, RequestSeq, "continue", _{allThreadsContinued:null}),
+    succ(Seq0, Seq),
+    thread_send_message(ThreadId, continue).
 da_server_command("disconnect", RequestSeq, _Message, Out, _W, State, State, Seq0, exiting(Seq)) :-
     maplist(da_server_disconnect_debugee, State),
     dap_response(Out, Seq0, RequestSeq, "disconnect"),
