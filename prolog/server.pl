@@ -207,6 +207,10 @@ da_server_command("disconnect", RequestSeq, _Message, Out, _W, State, State, Seq
     maplist(da_server_disconnect_debugee, State),
     dap_response(Out, Seq0, RequestSeq, "disconnect"),
     succ(Seq0, Seq).
+da_server_command(Command, RequestSeq, _Message, Out, _W, State, State, Seq0, Seq) :-
+    format(string(ErrorMessage), "Command \"~w\" is not implemented", [Command]),
+    dap_error(Out, Seq0, RequestSeq, Command, ErrorMessage),
+    succ(Seq0, Seq).
 
 
 da_server_disconnect_debugee(debugee(BlobThreadId, _EphermalThreadId, _Goal)) :-
