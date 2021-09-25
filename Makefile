@@ -16,6 +16,6 @@ $(SERVER): $(SRC_FILES)
 	@$(PROLOG) -o $(SERVER) -c $(SRC_DIR)/main.pl
 
 check:
-	@$(PROLOG) -g "findall(T, directory_member($(TEST_DIR), T, [extensions(['plt'])]), Ts), load_files(Ts, [])" -g run_tests -t halt
+	@$(PROLOG) -g "findall(T, directory_member($(TEST_DIR), T, [extensions(['plt'])]), Ts), load_files(Ts, [])" -g "debug(dap(test)), debug(dap(client)), debug(dap(server)), debug(dap(tracer)), run_tests" -t halt
 clean:
 	@rm -r $(BIN_DIR) 2>/dev/null || true

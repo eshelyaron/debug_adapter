@@ -2,6 +2,12 @@
        da_client,
        [
            dap_request_response/3,
+           dap_request_response/4,
+           dap_request_response/5,
+           dap_request_response/6,
+           dap_request_response/7,
+           dap_request_response/8,
+           dap_request_response/10,
            dap_request_response/11
        ]
    ).
@@ -51,11 +57,13 @@ dap_await_response(In, Seq, Command, OnEventGoal, Events, Success, Message, Body
         _{ type : Type} :< R,
         (   Type = "response"
         ->  (   _{ request_seq : Seq, command : Command, success : Success } :< R
-            ->  Events = [], Message = R.get(message, null), Body = R.get(body, null)
+            ->  Events = [], Message = R.get(message, null), Body = R.get(body, null),
+                debug(dap(client), "Received response ~w ~w ~w ~w", [Seq, Success, Message, Body])
             ;   dap_await_response(In, Seq, Command, OnEventGoal, Events, Success, Message, Body, Timeout)
             )
         ;   Type = "event"
         ->  _{ seq : EventSeq0, event : EventType0 } :< R,
+            debug(dap(client), "Received event ~w ~w", [EventSeq0, EventType0]),
             EventBody0 = R.get(body, null),
             call(OnEventGoal, event(EventSeq0, EventType0, EventBody0), Events0),
             append(Events0, EventsT, Events),

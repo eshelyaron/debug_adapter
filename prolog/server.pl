@@ -24,14 +24,22 @@ da_server(Options) :-
     set_stream(R, buffer(full)),
     set_stream(R, encoding(octet)),
     set_stream(W, buffer(false)),
-    set_stream(W, alias(w)),
     da_server_loop([], 1, In, Out, R, W).
 
 :- det(da_server_loop/6).
+da_server_loop([], exiting(_), _In, _Out, R, W) :-
+    !,
+    close(R),
+    close(W),
+    thread_exit(0).
+da_server_loop(State0, exiting(Seq0), In, Out, R, W) :-
+    !,
+    wait_for_input([R], Inputs, infinite),
+    da_server_exiting_handled_stream(Inputs, Out, W, State0, State, Seq0, Seq),
+    da_server_loop(State, exiting(Seq), In, Out, R, W).
 da_server_loop(State0, Seq0, In, Out, R, W) :-
     debug(dap(server), "Waiting", []),
     wait_for_input([In, R], Inputs, infinite),
-    debug(dap(server), "Got something", []),
     da_server_handled_streams(In, R, Inputs, Out, W, State0, State, Seq0, Seq),
     da_server_loop(State, Seq, In, Out, R, W).
 
@@ -49,9 +57,31 @@ da_server_handled_stream(_In, R, R, Out, _, State0, State, Seq0, Seq) :-
     get_code(R, _),
     da_server_handled_debugee_messages(Out, State0, State, Seq0, Seq).
 
+da_server_exiting_handled_stream([R], Out, _, State0, State, Seq0, Seq) :-
+    get_code(R, _),
+    da_server_exiting_handled_debugee_messages(Out, State0, State, Seq0, Seq).
+
+da_server_exiting_handled_debugee_messages(Out, State0, State, Seq0, Seq) :-
+    (   thread_peek_message(_)
+    ->  thread_get_message(DebugeeThreadId-Message),
+        da_server_exiting_handled_debugee_message(DebugeeThreadId, Message, Out, State0, State1, Seq0, Seq1),
+        da_server_exiting_handled_debugee_messages(Out, State1, State, Seq1, Seq)
+    ;   State = State0,
+        Seq   = Seq0
+    ).
+
+da_server_exiting_handled_debugee_message(DebugeeThreadId, Message,
+                                          Out, State0, State, Seq0, Seq) :-
+    (   functor(Message, stopped, _)
+    ->  catch(thread_send_message(DebugeeThreadId, disconnect), _, true)
+    ;   true
+    ),
+    da_server_handled_debugee_message(DebugeeThreadId, Message, Out, State0, State, Seq0, Seq).
+
 da_server_handled_debugee_messages(Out, State0, State, Seq0, Seq) :-
     (   thread_peek_message(_)
     ->  thread_get_message(DebugeeThreadId-Message),
+        debug(dap(server), "Received message ~w from debugee thread ~w", [Message, DebugeeThreadId]),
         da_server_handled_debugee_message(DebugeeThreadId, Message, Out, State0, State1, Seq0, Seq1),
         da_server_handled_debugee_messages(Out, State1, State, Seq1, Seq)
     ;   State = State0,
@@ -63,21 +93,21 @@ da_server_handled_debugee_message(_DebugeeThreadId,
                                   Out, State, State, Seq0, Seq) :-
     file_base_name(SourcePath, BaseName),
     dap_event(Out, Seq0, "loadedSource", _{ reason : Reason,
-                                                          source : _{ name : BaseName,
-                                                                      path : SourcePath
-                                                                    }
-                                                        }
-                           ),
+                                            source : _{ name : BaseName,
+                                                        path : SourcePath
+                                                      }
+                                          }
+             ),
     succ(Seq0, Seq).
 da_server_handled_debugee_message(DebugeeThreadId,
                                   stopped(Reason, Description, Text, BreakpointIds),
                                   Out, State, State, Seq0, Seq) :-
     dap_event(Out, Seq0, "stopped", _{ threadId         : DebugeeThreadId,
-                                                     reason           : Reason,
-                                                     description      : Description,
-                                                     text             : Text,
-                                                     hitBreakpointIds : BreakpointIds
-                                                   }
+                                       reason           : Reason,
+                                       description      : Description,
+                                       text             : Text,
+                                       hitBreakpointIds : BreakpointIds
+                                     }
                            ),
     succ(Seq0, Seq).
 da_server_handled_debugee_message(_DebugeeThreadId,
@@ -93,11 +123,12 @@ da_server_handled_debugee_message(_DebugeeThreadId,
     succ(Seq0, Seq).
 da_server_handled_debugee_message(DebugeeThreadId,
                                   thread_exited,
-                                  Out, State, State, Seq0, Seq) :-
+                                  Out, State0, State, Seq0, Seq) :-
     dap_event(Out, Seq0, "thread", _{ reason   : "exited",
-                                                    threadId : DebugeeThreadId
-                                                  }),
-    succ(Seq0, Seq).
+                                      threadId : DebugeeThreadId
+                                    }),
+    succ(Seq0, Seq),
+    select(debugee(_, DebugeeThreadId, _), State0, State).
 
 
 prolog_dap_stack_frame(stack_frame(Id, Name, 0, null, _, _, _, _),  % foreign predicate
@@ -172,10 +203,14 @@ da_server_command("stepIn", RequestSeq, Message, Out, _W, State, State, Seq0, Se
     dap_response(Out, Seq0, RequestSeq, "stepIn"),
     succ(Seq0, Seq),
     thread_send_message(ThreadId, step_in).
-da_server_command("disconnect", RequestSeq, _Message, Out, _W, State, State, Seq0, Seq) :-
+da_server_command("disconnect", RequestSeq, _Message, Out, _W, State, State, Seq0, exiting(Seq)) :-
+    maplist(da_server_disconnect_debugee, State),
     dap_response(Out, Seq0, RequestSeq, "disconnect"),
-    succ(Seq0, Seq),
-    thread_exit(0).
+    succ(Seq0, Seq).
+
+
+da_server_disconnect_debugee(debugee(BlobThreadId, _EphermalThreadId, _Goal)) :-
+    thread_send_message(BlobThreadId, disconnect).
 
 prolog_dap_thread(debugee(PrologThreadId, ThreadId, _),
                   _{ name : Name,
@@ -192,9 +227,12 @@ da_server_capabilities(_{supportsConfigurationDoneRequest: true}).
 da_initialized(_).
 
 da_launched(Args, W, debugee(PrologThreadId, ThreadId, Goal)) :-
-    _{ module: ModulePath, goal: GoalString } :< Args,
+    _{ cwd: CWD, module: ModulePath, goal: GoalString } :< Args,
+    debug(dap(server), "Changing into directory ~w", [CWD]),
+    cd(CWD),
     term_string(Goal, GoalString),
     thread_self(ServerThreadId),
+    debug(dap(server), "Launching debugee thread", []),
     thread_create(da_debugee(ModulePath, Goal, ServerThreadId, W), PrologThreadId),
     thread_property(PrologThreadId, id(ThreadId)).
 

@@ -20,7 +20,10 @@ prolog:open_source_hook(Path, Stream, _Options) :-
     ),
     open(Path, read, Stream).
 
-%:- meta_predicate da_debugee(?, 0, ?, ?).
+
+% We manually perform custom qualification, so no `meta_predicate` is needed.
+% Keep the directive in a comment for reference.
+% :- meta_predicate da_debugee(?, 0, ?, ?).
 
 da_debugee(ModulePath, Goal, ServerThreadId, ServerInterruptHandle) :-
     asserta(da_debugee_server(ServerThreadId, ServerInterruptHandle)),
@@ -43,16 +46,17 @@ da_server_interrupt(Handle) :-
 :- meta_predicate da_trace(0, ?, ?).
 
 da_trace(Goal, ServerThreadId, ServerInterruptHandle) :-
-    debug(swipl_dap, "tracer setup", []),
+    debug(dap(tracer), "tracer setup", []),
     (   current_prolog_flag(gui_tracer, OldFlag)
     ->  true
     ;   OldFlag = false
     ),
     set_prolog_flag(gui_tracer, true),
     asserta((user:prolog_trace_interception(Port, Frame, Choice, Action) :-
-                 debug(swipl_dap, "intercepting ~w ~w", [Port, Frame]),
-                 da_trace_interception(Port, Frame, Choice, Action)
+                 notrace(da_trace_interception(Port, Frame, Choice, Action))
             ), Ref),
+    visible([+unify, +cut_call, +cut_exit, +break]),
+    prolog_skip_level(OldSkipLevel, very_deep),
     trace,
     catch((  Goal
           -> ExitCode = 0
@@ -62,8 +66,9 @@ da_trace(Goal, ServerThreadId, ServerInterruptHandle) :-
           ExitCode = 2
          ),
     notrace,
+    prolog_skip_level(_, OldSkipLevel),
     erase(Ref),
-    debug(swipl_dap, "tracer cleanup", []),
+    debug(dap(tracer), "tracer cleanup", []),
     set_prolog_flag(gui_tracer, OldFlag),
     da_debugee_exited(ExitCode, ServerThreadId, ServerInterruptHandle).
 
@@ -74,7 +79,8 @@ da_debugee_exited(R, S, W) :-
 
 :- det(da_trace_interception/4).
 da_trace_interception(Port, Frame, Choice, Action) :-
-    once(da_debugee_server(ServerThreadId, ServerInterruptHandle)),
+    debug(dap(tracer), "Intercepting ~w ~w ~w", [Port, Frame, Choice]),
+    da_debugee_server(ServerThreadId, ServerInterruptHandle),
     (   da_tracer_last_action(LastAction)
     ->  prolog_dap_stopped_reason(Port, LastAction, Reason, Description, Text)
     ;   Reason = "entry", Description = "Paused on goal entry", Text = null
@@ -98,18 +104,20 @@ prolog_dap_stopped_reason(Port, _, Reason, null, null) :-
     atom_string(Atom, Reason).
 
 :- det(da_tracer_handled_message/7).
-da_tracer_handled_message(stack_trace(RequestId), _Port, Frame, _Choice, loop, S, W) :-
+da_tracer_handled_message(stack_trace(RequestId), Port, Frame, _Choice, loop, S, W) :-
+    !,
     current_prolog_flag(backtrace_depth, Depth),
-    da_stack_frames(Depth, Frame, call, StackFrames),
+    da_stack_frames(Depth, Frame, Port, StackFrames),
     da_debugee_emitted_message(stack_trace(RequestId, StackFrames), S, W).
-da_tracer_handled_message(step_in, _Port, _Frame, _Choice, continue, _S, _W).
+da_tracer_handled_message(step_in, _Port, _Frame, _Choice, continue, _S, _W) :- !.
+da_tracer_handled_message(disconnect, _Port, _Frame, _Choice, nodebug, _S, _W) :- !.
 
-da_stack_frames(0, _, _, []) :- !.
-da_stack_frames(Depth, F, PC, Frames) :-
-    (   prolog_frame_attribute(F, hidden, true)
+:- det(da_stack_frames/4).
+da_stack_frames(Depth, F, Port, Frames) :-
+    (   prolog_frame_attribute(F, hidden, true), debug(dap(tracer), "skipping hidden frame ~w", [F])
     ->  RestFrames = Frames,
         ND is Depth
-    ;   da_stack_frames_source_span(F, PC, SourceRef, Path, SL, SC, EL, EC),
+    ;   da_frame_port_source_span(F, Port, SourceRef, Path, SL, SC, EL, EC),
         prolog_frame_attribute(F, predicate_indicator, PI0),
         term_string(PI0, PI),
         Frames = [stack_frame(F, PI, SourceRef, Path, SL, SC, EL, EC)|RestFrames],
@@ -120,42 +128,166 @@ da_stack_frames(Depth, F, PC, Frames) :-
         ->  true
         ;   PCParent = foreign
         )
-    ->  da_stack_frames(ND, Parent, PCParent, RestFrames)
+    ->  da_ancestral_stack_frames(ND, Parent, PCParent, RestFrames)
     ;   RestFrames = []
     ).
 
-da_stack_frames_source_span(Frame, PC, Ref, Path, SL, SC, EL, EC) :-
-    (   clause_position(PC),
-        prolog_frame_attribute(Frame, clause, ClauseRef),
-        ClauseRef \== 0
-    ->  Ref = 0,
-        subgoal_position(ClauseRef, PC, Path, SO, EO),
-        file_offset_line_column(Path, SO, SL, SC),
-        file_offset_line_column(Path, EO, EL, EC)
+:- det(da_ancestral_stack_frames/4).
+da_ancestral_stack_frames(Depth, F, PC, Frames) :-
+    (   prolog_frame_attribute(F, hidden, true), debug(dap(tracer), "skipping hidden frame ~w", [F])
+    ->  RestFrames = Frames,
+        ND is Depth
+    ;   da_frame_pc_source_span(F, PC, SourceRef, Path, SL, SC, EL, EC),
+        prolog_frame_attribute(F, predicate_indicator, PI0),
+        term_string(PI0, PI),
+        Frames = [stack_frame(F, PI, SourceRef, Path, SL, SC, EL, EC)|RestFrames],
+        ND is Depth - 1
+    ),
+    (   prolog_frame_attribute(F, parent, Parent),
+        (   prolog_frame_attribute(F, pc, PCParent)
+        ->  true
+        ;   PCParent = foreign
+        )
+    ->  da_ancestral_stack_frames(ND, Parent, PCParent, RestFrames)
+    ;   RestFrames = []
+    ).
+
+
+
+:- det(da_frame_pc_source_span/8).
+da_frame_pc_source_span(Frame, foreign, Ref, Path, SL, SC, EL, EC) :-
+    prolog_frame_attribute(Frame, goal, Goal),
+    da_foreign_goal_source_span(Goal, Ref, Path, SL, SC, EL, EC), !.
+da_frame_pc_source_span(Frame, PC, Ref, Path, SL, SC, EL, EC) :-
+    prolog_frame_attribute(Frame, clause, ClauseRef),
+    da_call_site_source_span(ClauseRef, PC, Ref, Path, SL, SC, EL, EC), !.
+
+:- det(da_frame_port_source_span/8).
+da_frame_port_source_span(Frame, Port, Ref, Path, SL, SC, EL, EC) :-
+    da_port_clause_direction(Port, Direction),
+    debug(dap(tracer), "da_frame_port_source_span(~w, ~w[~w], ...", [Frame, Port, Direction]),
+    !,
+    (   prolog_frame_attribute(Frame, pc, PC),
+        debug(dap(tracer), "prolog_frame_attribute(~w, pc, ~w)", [Frame, PC])
+    ->  prolog_frame_attribute(Frame, parent, ParentFrame),
+        debug(dap(tracer), "prolog_frame_attribute(~w, parent, ~w)", [Frame, ParentFrame]),
+        (   da_hidden_frame(ParentFrame)
+        ->  da_frame_clause_or_goal_source_span(Frame, Direction, Ref, Path, SL, SC, EL, EC)
+        ;   prolog_frame_attribute(ParentFrame, clause, ParentClause),
+            da_call_site_source_span(ParentClause, PC, Direction, Ref, Path, SL, SC, EL, EC)
+        )
+    ;   da_frame_clause_or_goal_source_span(Frame, Direction, Ref, Path, SL, SC, EL, EC)
+    ).
+da_frame_port_source_span(Frame, Port, Ref, Path, SL, SC, EL, EC) :-
+    da_port_pc(Port, PC),
+    debug(dap(tracer), "da_frame_port_source_span(~w, redo(~w), ...", [Frame, PC]),
+    !,
+    prolog_frame_attribute(Frame, clause, ClauseRef),
+    da_call_site_source_span(ClauseRef, PC, entry, Ref, Path, SL, SC, EL, EC).
+da_frame_port_source_span(Frame, unify, Ref, Path, SL, SC, EL, EC) :-
+    debug(dap(tracer), "da_frame_port_source_span(~w, unify, ...", [Frame]),
+    !,
+    da_frame_clause_or_goal_source_span(Frame, neck, Ref, Path, SL, SC, EL, EC).
+
+da_port_pc(redo(PC), PC) :-  !.
+da_port_pc(break(PC), PC) :- !.
+da_port_pc(cut_call(PC), PC) :- !.
+da_port_pc(cut_exit(PC), PC) :- !.
+
+da_port_clause_direction(Port, entry) :- da_entry_port(Port), !.
+da_port_clause_direction(Port, exit) :- da_exit_port(Port), !.
+
+da_entry_port(redo(0)) :- !.
+da_entry_port(call) :- !.
+
+da_exit_port(fail) :- !.
+da_exit_port(exit) :- !.
+da_exit_port(exception(_)) :- !.
+
+:- det(da_clause_source_span/8).
+da_clause_source_span(ClauseRef, entry, 0, Path, SL, SC, EL, EC) :-
+    debug(dap(tracer), "da_clause_head_source_span(~w, ~w, ...", [ClauseRef, entry]),
+    !,
+    clause_info(ClauseRef, Path, TPos, _),
+    head_pos(ClauseRef, TPos, PosTerm),
+    arg(1, PosTerm, SO),
+    file_offset_line_column(Path, SO, SL, SC),
+    arg(2, PosTerm, EO),
+    file_offset_line_column(Path, EO, EL, EC).
+da_clause_source_span(ClauseRef, exit, 0, Path, SL, SC, SL, EC) :-
+    debug(dap(tracer), "da_clause_head_source_span(~w, ~w, ...", [ClauseRef, exit]),
+    !,
+    clause_info(ClauseRef, Path, TPos, _),
+    arg(2, TPos, EO),
+    file_offset_line_column(Path, EO, SL, SC),
+    succ(SC, EC).
+da_clause_source_span(ClauseRef, neck, 0, Path, SL, SC, EL, EC) :-
+    debug(dap(tracer), "da_clause_head_source_span(~w, ~w, ...", [ClauseRef, neck]),
+    !,
+    clause_info(ClauseRef, Path, term_position(_F, _T, SO, EO, _), _),
+    file_offset_line_column(Path, SO, SL, SC),
+    file_offset_line_column(Path, EO, EL, EC).
+
+da_frame_clause_or_goal_source_span(Frame, Direction, Ref, Path, SL, SC, EL, EC) :-
+    debug(dap(tracer), "da_frame_clause_or_goal_source_span(~w, ~w, ...", [Frame, Direction]),
+    (   prolog_frame_attribute(Frame, clause, ClauseRef),
+        debug(dap(tracer), "prolog_frame_attribute(~w, clause, ~w)", [Frame, ClauseRef])
+    ->  da_clause_source_span(ClauseRef, Direction, Ref, Path, SL, SC, EL, EC)
     ;   prolog_frame_attribute(Frame, goal, Goal),
-        qualify(Goal, QGoal),
-        (   predicate_property(QGoal, foreign)
-        ->  Ref = 0, Path = null, SL = 0, SC = 0, EL = null, EC = null
-        ;   (   clause(QGoal, _Body, ClauseRef)
-            ->  Ref = 0,
-                subgoal_position(ClauseRef, unify, Path, SO, EO),
-                file_offset_line_column(Path, SO, SL, SC),
-                file_offset_line_column(Path, EO, EL, EC)
-            ;   functor(Goal, Functor, Arity),
-                functor(GoalTemplate, Functor, Arity),
-                qualify(GoalTemplate, QGoalTemplate),
-                clause(QGoalTemplate, _Body, ClauseRef)
-            ->  Ref = 0,
-                subgoal_position(ClauseRef, unify, Path, SO, EO),
-                file_offset_line_column(Path, SO, SL, SC),
-                file_offset_line_column(Path, EO, EL, EC)
-            ;   predicate_property(QGoal, file(Path)),
-                predicate_property(QGoal, line_count(SL))
-            ->  Ref = 0, SC = 0, EL = null, EC = null
-            ;   da_tracer_cached_goal(QGoal, Ref), Path = null, SL = 0, SC = 0, EL = null, EC = null
+        debug(dap(tracer), "prolog_frame_attribute(~w, goal, ~w)", [Frame, Goal]),
+        (   clause(Goal, _Body, ClauseRef)
+        ->  da_clause_source_span(ClauseRef, Direction, Ref, Path, SL, SC, EL, EC)
+        ;   Goal = Module:UnqualifiedGoal,
+            functor(UnqualifiedGoal, Functor, Arity),
+            functor(UnqualifiedGoalTemplate, Functor, Arity),
+            (   clause(Module:UnqualifiedGoalTemplate, _Body, ClauseRef)
+            ->  da_clause_source_span(ClauseRef, Direction, Ref, Path, SL, SC, EL, EC)
+            ;   (   da_predicate_source_span(Module:UnqualifiedGoalTemplate, Direction, Ref, Path, SL, SC, EL, EC)
+                ->  true
+                ;   da_foreign_goal_source_span(Goal, Direction, Ref, Path, SL, SC, EL, EC)
+                )
             )
         )
     ).
+
+da_predicate_source_span(Goal, _Direction, 0, Path, SL, 0, null, null) :-
+    predicate_property(Goal, file(Path)),
+    predicate_property(Goal, line(SL)).
+
+da_hidden_frame(Frame) :- prolog_frame_attribute(Frame, hidden, true), !.
+da_hidden_frame(Frame) :-
+    prolog_frame_attribute(Frame, goal, Goal),
+    da_hidden_predicate(Goal), !.
+
+da_hidden_predicate(Goal) :- predicate_property(Goal, nodebug), !.
+da_hidden_predicate(Goal) :- predicate_property(Goal, foreign), !.
+
+da_foreign_goal_source_span(Goal, Ref, Path, SL, SC, EL, EC) :-
+    da_foreign_goal_source_span(Goal, entry, Ref, Path, SL, SC, EL, EC).
+
+da_foreign_goal_source_span(_Goal, _Direction, 0, null, 0, 0, null, null).
+
+da_call_site_source_span(ClauseRef, PC, Ref, Path, SL, SC, EL, EC) :-
+    da_call_site_source_span(ClauseRef, PC, entry, Ref, Path, SL, SC, EL, EC).
+
+da_call_site_source_span(ClauseRef, PC, entry, 0, Path, SL, SC, EL, EC) :-
+    !,
+    clause_info(ClauseRef, Path, TPos, _),
+    '$clause_term_position'(ClauseRef, PC, List),
+    find_subgoal(List, TPos, PosTerm),
+    arg(1, PosTerm, SO),
+    file_offset_line_column(Path, SO, SL, SC),
+    arg(2, PosTerm, EO),
+    file_offset_line_column(Path, EO, EL, EC).
+
+da_call_site_source_span(ClauseRef, PC, exit, 0, Path, SL, SC, SL, EC) :-
+    !,
+    clause_info(ClauseRef, Path, TPos, _),
+    '$clause_term_position'(ClauseRef, PC, List),
+    find_subgoal(List, TPos, PosTerm),
+    arg(2, PosTerm, EO),
+    file_offset_line_column(Path, EO, SL, SC),
+    succ(SC, EC).
 
 :- thread_local da_tracer_goal_ref/2.
 
@@ -165,38 +297,6 @@ da_tracer_cached_goal(Goal, Ref) :-
     ;   Ref is 0
     ),
     asserta(da_tracer_goal_ref(Goal, Ref)).
-
-subgoal_position(ClauseRef, unify, File, CharA, CharZ) :-
-    !,
-    clause_info(ClauseRef, File, TPos, _),
-    head_pos(ClauseRef, TPos, PosTerm),
-    nonvar(PosTerm),
-    arg(1, PosTerm, CharA),
-    arg(2, PosTerm, CharZ).
-subgoal_position(ClauseRef, choice(CHP), File, CharA, CharZ) :-
-    !,
-    (   prolog_choice_attribute(CHP, type, jump),
-        prolog_choice_attribute(CHP, pc, To)
-    ->  subgoal_position(ClauseRef, To, File, CharA, CharZ)
-    ;   clause_end(ClauseRef, File, CharA, CharZ)
-    ).
-subgoal_position(ClauseRef, Port, File, CharA, CharZ) :-
-    end_port(Port),
-    !,
-    clause_end(ClauseRef, File, CharA, CharZ).
-subgoal_position(ClauseRef, PC, File, CharA, CharZ) :-
-    clause_info(ClauseRef, File, TPos, _),
-    (   '$clause_term_position'(ClauseRef, PC, List)
-    ->  (   find_subgoal(List, TPos, PosTerm)
-        ->  true
-        ;   PosTerm = TPos,
-            fail
-        ),
-        nonvar(PosTerm),
-        arg(1, PosTerm, CharA),
-        arg(2, PosTerm, CharZ)
-    ;   fail
-    ).
 
 clause_end(ClauseRef, File, CharA, CharZ) :-
     clause_info(ClauseRef, File, TPos, _),
@@ -237,11 +337,6 @@ qualify(Goal, _, Goal) :-
     !.
 qualify(Goal, Module, Module:Goal).
 
-clause_position(PC) :- integer(PC), !.
-clause_position(exit).
-clause_position(unify).
-clause_position(choice(_)).
-
 file_offset_line_column(File, Offset, Line, Column) :-
     setup_call_cleanup(
         ( prolog_clause:try_open_source(File, Fd),
@@ -254,8 +349,7 @@ file_offset_line_column_(Fd, Offset, Line, Column) :-
     character_count(Fd, CurrentOffset),
     (   CurrentOffset == Offset
     ->  line_count(Fd, Line),
-        line_position(Fd, Column0),
-        succ(Column0, Column)
+        line_position(Fd, Column)
     ;   get_code(Fd, _),
         file_offset_line_column_(Fd, Offset, Line, Column)
     ).

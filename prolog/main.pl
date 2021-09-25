@@ -31,7 +31,7 @@ main(Argv) :-
 
     opt_parse(OptsSpec, Argv, Opts, _PosArgs),
 
-    ( option(debug(  true), Opts) -> debug(swipl_dap); true ),
+    ( option(debug(  true), Opts) -> debug(dap(tracer)); true ),
     ( option(version(true), Opts) -> format("version ~w~n", ['0.1.0'])
     ; option(help(   true), Opts) -> opt_help(OptsSpec, Help), write(Help)
     ; set_prolog_flag(toplevel_prompt, ''),
