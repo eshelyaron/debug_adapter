@@ -152,8 +152,6 @@ da_ancestral_stack_frames(Depth, F, PC, Frames) :-
     ;   RestFrames = []
     ).
 
-
-
 :- det(da_frame_pc_source_span/8).
 da_frame_pc_source_span(Frame, foreign, Ref, Path, SL, SC, EL, EC) :-
     prolog_frame_attribute(Frame, goal, Goal),
@@ -183,7 +181,7 @@ da_frame_port_source_span(Frame, Port, Ref, Path, SL, SC, EL, EC) :-
     debug(dap(tracer), "da_frame_port_source_span(~w, redo(~w), ...", [Frame, PC]),
     !,
     prolog_frame_attribute(Frame, clause, ClauseRef),
-    da_call_site_source_span(ClauseRef, PC, entry, Ref, Path, SL, SC, EL, EC).
+    da_call_site_source_span(ClauseRef, PC, Ref, Path, SL, SC, EL, EC).
 da_frame_port_source_span(Frame, unify, Ref, Path, SL, SC, EL, EC) :-
     debug(dap(tracer), "da_frame_port_source_span(~w, unify, ...", [Frame]),
     !,
@@ -205,26 +203,68 @@ da_exit_port(exit) :- !.
 da_exit_port(exception(_)) :- !.
 
 :- det(da_clause_source_span/8).
-da_clause_source_span(ClauseRef, entry, 0, Path, SL, SC, EL, EC) :-
-    debug(dap(tracer), "da_clause_head_source_span(~w, ~w, ...", [ClauseRef, entry]),
+da_clause_source_span(ClauseRef, Direction, 0, Path, SL, SC, EL, EC) :-
+    debug(dap(tracer), "da_clause_head_source_span(~w, ~w, ...", [ClauseRef, Direction]),
+    clause_info(ClauseRef, Path, TPos, Vars),
     !,
-    clause_info(ClauseRef, Path, TPos, _),
+    debug(dap(tracer), "clause_info(~w, ~w, ~w, ~w)", [ClauseRef, Path, TPos, Vars]),
+    da_clause_static_source_span(ClauseRef, TPos, Direction, Path, SL, SC, EL, EC).
+da_clause_source_span(ClauseRef, Direction, Ref, Path, SL, SC, EL, EC) :-
+    da_clause_dynamic_source_span(ClauseRef, Direction, Ref, Path, SL, SC, EL, EC).
+
+:- det(da_clause_dynamic_source_span/8).
+da_clause_dynamic_source_span(ClauseRef, Direction, 0, Path, SL, SC, EL, EC) :-
+    ( clause_property(ClauseRef, fact)
+    -> Fact = true
+    ;  Fact = false
+    ),
+    clause_tmp_stream(ClauseRef, Path, R),
+    read_term(R, _T, [subterm_positions(TPos)]),
+    da_clause_dynamic_source_span_(Fact, TPos, Direction, Path, SL, SC, EL, EC).
+
+da_clause_dynamic_source_span_(true, HeadPos, entry, Path, SL, SC, EL, EC) :-
+    !,
+    arg(1, HeadPos, SO),
+    file_offset_line_column(Path, SO, SL, SC),
+    arg(2, HeadPos, EO),
+    file_offset_line_column(Path, EO, EL, EC).
+da_clause_dynamic_source_span_(_, term_position(_, _, _, _, [HeadPos]), entry, Path, SL, SC, EL, EC) :-
+    !,
+    arg(1, HeadPos, SO),
+    file_offset_line_column(Path, SO, SL, SC),
+    arg(2, HeadPos, EO),
+    file_offset_line_column(Path, EO, EL, EC).
+da_clause_dynamic_source_span_(_, TermPos, exit, Path, SL, SC, SL, EC) :-
+    !,
+    arg(2, TermPos, EO),
+    file_offset_line_column(Path, EO, SL, SC),
+    succ(SC, EC).
+da_clause_dynamic_source_span_(true, TermPos, neck, Path, SL, SC, SL, EC) :-
+    !,
+    arg(2, TermPos, EO),
+    file_offset_line_column(Path, EO, SL, SC),
+    succ(SC, EC).
+da_clause_dynamic_source_span_(_, term_position(_F, _T, SO, EO, _), neck, Path, SL, SC, EL, EC) :-
+    !,
+    file_offset_line_column(Path, SO, SL, SC),
+    file_offset_line_column(Path, EO, EL, EC).
+
+
+:- det(da_clause_static_source_span/8).
+da_clause_static_source_span(ClauseRef, TPos, entry, Path, SL, SC, EL, EC) :-
+    !,
     head_pos(ClauseRef, TPos, PosTerm),
     arg(1, PosTerm, SO),
     file_offset_line_column(Path, SO, SL, SC),
     arg(2, PosTerm, EO),
     file_offset_line_column(Path, EO, EL, EC).
-da_clause_source_span(ClauseRef, exit, 0, Path, SL, SC, SL, EC) :-
-    debug(dap(tracer), "da_clause_head_source_span(~w, ~w, ...", [ClauseRef, exit]),
+da_clause_static_source_span(_ClauseRef, TPos, exit, Path, SL, SC, SL, EC) :-
     !,
-    clause_info(ClauseRef, Path, TPos, _),
     arg(2, TPos, EO),
     file_offset_line_column(Path, EO, SL, SC),
     succ(SC, EC).
-da_clause_source_span(ClauseRef, neck, 0, Path, SL, SC, EL, EC) :-
-    debug(dap(tracer), "da_clause_head_source_span(~w, ~w, ...", [ClauseRef, neck]),
+da_clause_static_source_span(_ClauseRef, term_position(_F, _T, SO, EO, _), neck, Path, SL, SC, EL, EC) :-
     !,
-    clause_info(ClauseRef, Path, term_position(_F, _T, SO, EO, _), _),
     file_offset_line_column(Path, SO, SL, SC),
     file_offset_line_column(Path, EO, EL, EC).
 
@@ -234,18 +274,19 @@ da_frame_clause_or_goal_source_span(Frame, Direction, Ref, Path, SL, SC, EL, EC)
         debug(dap(tracer), "prolog_frame_attribute(~w, clause, ~w)", [Frame, ClauseRef])
     ->  da_clause_source_span(ClauseRef, Direction, Ref, Path, SL, SC, EL, EC)
     ;   prolog_frame_attribute(Frame, goal, Goal),
-        debug(dap(tracer), "prolog_frame_attribute(~w, goal, ~w)", [Frame, Goal]),
-        (   clause(Goal, _Body, ClauseRef)
-        ->  da_clause_source_span(ClauseRef, Direction, Ref, Path, SL, SC, EL, EC)
-        ;   Goal = Module:UnqualifiedGoal,
-            functor(UnqualifiedGoal, Functor, Arity),
-            functor(UnqualifiedGoalTemplate, Functor, Arity),
-            (   clause(Module:UnqualifiedGoalTemplate, _Body, ClauseRef)
+        unqualify(Goal, Module, UGoal),
+        debug(dap(tracer), "prolog_frame_attribute(~w, goal, ~w:~w)", [Frame, Module, UGoal]),
+        (   predicate_property(Module:UGoal, foreign)
+        ->  da_foreign_goal_source_span(Module:UGoal, Direction, Ref, Path, SL, SC, EL, EC)
+        ;   (   clause(Module:UGoal, _Body, ClauseRef)
             ->  da_clause_source_span(ClauseRef, Direction, Ref, Path, SL, SC, EL, EC)
-            ;   (   da_predicate_source_span(Module:UnqualifiedGoalTemplate, Direction, Ref, Path, SL, SC, EL, EC)
-                ->  true
-                ;   da_foreign_goal_source_span(Goal, Direction, Ref, Path, SL, SC, EL, EC)
-                )
+            ;   functor(UGoal, Functor, Arity),
+                functor(UGoalTemplate, Functor, Arity),
+                clause(Module:UGoalTemplate, _Body, ClauseRef)
+            ->  da_clause_source_span(ClauseRef, Direction, Ref, Path, SL, SC, EL, EC)
+            ;   da_predicate_source_span(Module:UGoal, Direction, Ref, Path, SL, SC, EL, EC)
+            ->  true
+            ;   da_foreign_goal_source_span(Module:UGoal, Direction, Ref, Path, SL, SC, EL, EC)
             )
         )
     ).
@@ -270,33 +311,41 @@ da_foreign_goal_source_span(_Goal, _Direction, 0, null, 0, 0, null, null).
 da_call_site_source_span(ClauseRef, PC, Ref, Path, SL, SC, EL, EC) :-
     da_call_site_source_span(ClauseRef, PC, entry, Ref, Path, SL, SC, EL, EC).
 
-da_call_site_source_span(ClauseRef, PC, entry, 0, Path, SL, SC, EL, EC) :-
-    !,
+da_call_site_source_span(ClauseRef, PC, Direction, 0, Path, SL, SC, EL, EC) :-
     clause_info(ClauseRef, Path, TPos, _),
     '$clause_term_position'(ClauseRef, PC, List),
+    !,
     find_subgoal(List, TPos, PosTerm),
+    da_call_site_static_source_span(Direction, PosTerm, Path, SL, SC, EL, EC).
+da_call_site_source_span(ClauseRef, PC, Direction, 0, Path, SL, SC, EL, EC) :-
+    clause_tmp_stream(ClauseRef, Path, R),
+    read_term(R, _T, [subterm_positions(TPos)]),
+    '$clause_term_position'(ClauseRef, PC, List),
+    find_subgoal(List, TPos, PosTerm),
+    da_call_site_static_source_span(Direction, PosTerm, Path, SL, SC, EL, EC).
+
+da_call_site_static_source_span(entry, PosTerm, Path, SL, SC, EL, EC) :-
+    !,
     arg(1, PosTerm, SO),
     file_offset_line_column(Path, SO, SL, SC),
     arg(2, PosTerm, EO),
     file_offset_line_column(Path, EO, EL, EC).
-
-da_call_site_source_span(ClauseRef, PC, exit, 0, Path, SL, SC, SL, EC) :-
+da_call_site_static_source_span(exit, PosTerm, Path, SL, SC, SL, EC) :-
     !,
-    clause_info(ClauseRef, Path, TPos, _),
-    '$clause_term_position'(ClauseRef, PC, List),
-    find_subgoal(List, TPos, PosTerm),
     arg(2, PosTerm, EO),
     file_offset_line_column(Path, EO, SL, SC),
     succ(SC, EC).
 
-:- thread_local da_tracer_goal_ref/2.
-
-da_tracer_cached_goal(Goal, Ref) :-
-    (   da_tracer_goal_ref(_, Ref0)
-    ->  Ref is Ref0 + 1
-    ;   Ref is 0
-    ),
-    asserta(da_tracer_goal_ref(Goal, Ref)).
+clause_tmp_stream(ClauseRef, Path, R) :-
+    clause(Head, Body, ClauseRef),
+    tmp_file_stream(Path, S, [ encoding(text),
+                               extension("pl")
+                             ]
+                   ),
+    set_stream(S, buffer(false)),
+    portray_clause(S, (Head :- Body)),
+    close(S),
+    open(Path, read, R).
 
 clause_end(ClauseRef, File, CharA, CharZ) :-
     clause_info(ClauseRef, File, TPos, _),
@@ -336,6 +385,10 @@ qualify(Goal, _, Goal) :-
     functor(Goal, :, 2),
     !.
 qualify(Goal, Module, Module:Goal).
+
+unqualify(Module:Goal, Module, Goal) :-
+    !.
+unqualify(Goal, user, Goal).
 
 file_offset_line_column(File, Offset, Line, Column) :-
     setup_call_cleanup(
