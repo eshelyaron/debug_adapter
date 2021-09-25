@@ -21,7 +21,7 @@
 (defun dap-swi-prolog--populate-start-file-args (conf)
   "Populate CONF with the required arguments."
   (let ((conf (-> conf
-                  (dap--put-if-absent :dap-server-path dap-swi-prolog-debug-program)
+                  (dap--put-if-absent :dap-server-path (list dap-swi-prolog-debug-program))
                   (dap--put-if-absent :type "swi-prolog")
                   (dap--put-if-absent :cwd default-directory)
                   (dap--put-if-absent :module (buffer-file-name))
