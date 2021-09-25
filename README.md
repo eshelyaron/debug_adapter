@@ -27,7 +27,7 @@ Some of the needed steps towards these goals are:
 
 - [x] Stepping through the source code of a debugee with precise source positions
 - [ ] Stepping over, backwards, etc.
-- [ ] Providing source code for dynamic predicates through decompilation
+- [x] Providing source code for dynamic predicates through decompilation
 - [ ] Installing breakpoints at source positions
 - [ ] Providing information about variable bindings in each frame
 - [ ] Editing and reloading source code during break

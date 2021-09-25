@@ -5,7 +5,11 @@
        ]
    ).
 
+:- use_module(bar).
+
 foo :-
+    asserta(bar(Foo) :- Foo = foo),
+    bar(foo, baz),
     foo(bar).
 
 foo(bar) :-
