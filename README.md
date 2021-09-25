@@ -30,6 +30,7 @@ Some of the needed steps towards these goals are:
 - [ ] Providing source code for dynamic predicates through decompilation
 - [ ] Installing breakpoints at source positions
 - [ ] Providing information about variable bindings in each frame
+- [ ] Editing and reloading source code during break
 - [ ] ...
 
 ## Demo
