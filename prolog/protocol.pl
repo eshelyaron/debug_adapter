@@ -45,10 +45,10 @@ dap_response(Out, Seq, RequestSeq, Command, Body) :-
 
 dap_response(Out, Seq, RequestSeq, Command, Success, Message, Body) :-
     dap_message(Out, Seq, "response", _{ request_seq: RequestSeq,
-                                                       success    : Success,
-                                                       command    : Command,
-                                                       message    : Message,
-                                                       body       : Body
+                                         success    : Success,
+                                         command    : Command,
+                                         message    : Message,
+                                         body       : Body
                                        }
                ).
 
