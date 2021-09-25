@@ -23,11 +23,12 @@ The two big milestones for this project are:
 * Reaching feature parity with SWI-Prolog's [built-in graphical debugger](https://www.swi-prolog.org/pldoc/man?section=guitracer) with a DAP enabled IDE (GNU Emacs + `dap-mode` in particular), and
 * Supporting the entire DAP specification
 
-Some of the needed steps to get to these goals are:
+Some of the needed steps towards these goals are:
 
-- [x] Supporting stepping through code
-- [ ] Supporting stepping over, etc.
-- [ ] Providing exact source location information for each frame+pc
+- [x] Stepping through the source code of a debugee with precise source positions
+- [ ] Stepping over, backwards, etc.
+- [ ] Providing source code for dynamic predicates through decompilation
+- [ ] Installing breakpoints at source positions
 - [ ] Providing information about variable bindings in each frame
 - [ ] ...
 
