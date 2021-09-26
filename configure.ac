@@ -1,4 +1,4 @@
-AC_PREREQ([2.71])
+AC_PREREQ([2.69])
 AC_INIT([debug_adapter], [0.1.4], [eshelshay.yaron@gmail.com])
 AC_PATH_PROG([PROLOG], [swipl])
 AC_PROG_MKDIR_P
