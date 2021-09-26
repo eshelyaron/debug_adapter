@@ -112,6 +112,7 @@ da_tracer_handled_message(stack_trace(RequestId), Port, Frame, _Choice, loop, S,
 da_tracer_handled_message(step_in, _Port, _Frame, _Choice, continue, _S, _W) :- !.
 da_tracer_handled_message(disconnect, _Port, _Frame, _Choice, nodebug, _S, _W) :- !.
 da_tracer_handled_message(continue, _Port, _Frame, _Choice, nodebug, _S, _W) :- !.
+da_tracer_handled_message(restart_frame(FrameId), _Port, _Frame, _Choice, retry(FrameId), _S, _W) :- !.
 
 :- det(da_stack_frames/4).
 da_stack_frames(Depth, F, Port, Frames) :-

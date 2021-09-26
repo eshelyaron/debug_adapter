@@ -213,6 +213,12 @@ da_server_command("disconnect", RequestSeq, _Message, Out, _W, State, State, Seq
     maplist(da_server_disconnect_debugee, State),
     dap_response(Out, Seq0, RequestSeq, "disconnect"),
     succ(Seq0, Seq).
+da_server_command("restartFrame", RequestSeq, Message, Out, _W, State, State, Seq0, Seq) :-
+    _{ arguments : Args    } :< Message,
+    _{ frameId   : FrameId } :< Args,
+    dap_response(Out, Seq0, RequestSeq, "restartFrame"),
+    succ(Seq0, Seq),
+    maplist([debugee(PrologThreadId, _, _)]>>thread_send_message(PrologThreadId, restart_frame(FrameId)), State).
 da_server_command(Command, RequestSeq, _Message, Out, _W, State, State, Seq0, Seq) :-
     format(string(ErrorMessage), "Command \"~w\" is not implemented", [Command]),
     dap_error(Out, Seq0, RequestSeq, Command, ErrorMessage),
