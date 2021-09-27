@@ -27,7 +27,7 @@ jobs:
           make check
           make distcheck
 
-      - name: "Build pack
+      - name: Build pack
         run: |
           make dist
 
