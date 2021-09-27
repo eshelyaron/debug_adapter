@@ -31,10 +31,10 @@ main(Argv) :-
 
     opt_parse(OptsSpec, Argv, Opts, _PosArgs),
 
-    ( option(debug(  true), Opts) -> debug(dap(tracer)); true ),
-    ( option(version(true), Opts) -> format("version ~w~n", ['0.1.0'])
+    ( option(version(true), Opts) -> version(Version), format("SWI-Prolog Debug Adapter Version ~w~n", [Version])
     ; option(help(   true), Opts) -> opt_help(OptsSpec, Help), write(Help)
     ; set_prolog_flag(toplevel_prompt, ''),
+      ( option(debug(  true), Opts) -> debug(dap(tracer)); true ),
       current_input(In),
       current_output(Out),
       da_server([in(In), out(Out)])

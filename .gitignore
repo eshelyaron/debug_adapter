@@ -21,3 +21,5 @@
 /test/server.log
 /test/server.trs
 /test/test-suite.log
+/debug_adapter-*.tar.gz
+/debug_adapter-*.zip
