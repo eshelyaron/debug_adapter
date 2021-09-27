@@ -5,6 +5,13 @@
        ]
    ).
 
+/** <module> SWI-Prolog Debug Adapter Tracer
+
+This module contains various interactions with the runtime
+introspection facilities of SWI-Prolog to implement hook-based
+tracer which is attached to each DAP debugged thread.
+*/
+
 :- thread_local da_debugee_server/2.
 :- thread_local da_tracer_last_action/1.
 
@@ -93,7 +100,7 @@ da_trace_interception(Port, Frame, Choice, Action) :-
 da_tracer_loop(Port, Frame, Choice, Action, ServerThreadId, ServerInterruptHandle) :-
     thread_get_message(Message),
     da_tracer_handled_message(Message, Port, Frame, Choice, Action0, ServerThreadId, ServerInterruptHandle),
-    (   Action0 = loop
+    (   Action0 == loop
     ->  da_tracer_loop(Port, Frame, Choice, Action, ServerThreadId, ServerInterruptHandle)
     ;   Action  = Action0
     ).

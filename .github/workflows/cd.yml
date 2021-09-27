@@ -1,16 +1,14 @@
-name: CI
+name: CD
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
-  workflow_dispatch:
+    tags:
+      - "v*"
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  tagged-release:
+    name: "Tagged Release"
+    runs-on: "ubuntu-latest"
 
     steps:
       - name: Install SWI-Prolog
@@ -28,3 +26,15 @@ jobs:
           make
           make check
           make distcheck
+
+      - name: "Build pack
+        run: |
+          make dist
+
+      - uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          prerelease: false
+          files: |
+            LICENSE
+            *.zip
