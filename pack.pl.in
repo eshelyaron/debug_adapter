@@ -5,4 +5,4 @@ author('Eshel Yaron', 'eshelshay.yaron@gmail.com').
 maintainer('Eshel Yaron', 'eshelshay.yaron@gmail.com').
 packager('Eshel Yaron', 'eshelshay.yaron@gmail.com').
 home('https://github.com/eshelyaron/debug_adapter').
-download('https://github.com/eshelyaron/debug_adapter/archive/v0.1.4.zip').
+download('https://github.com/eshelyaron/debug_adapter/releases/download/v@PACKAGE_VERSION@/debug_adapter-@PACKAGE_VERSION@.zip').
