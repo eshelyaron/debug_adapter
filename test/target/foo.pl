@@ -1,7 +1,8 @@
 :- module(
        foo,
        [
-           foo/0
+           foo/0,
+           foo/1
        ]
    ).
 
@@ -19,6 +20,9 @@ foo(bar) :-
 
 foo(baz) :-
     foo(baz, bar).
+
+foo(Foo) :-
+    foo(baz, Foo).
 
 foo(Bar, Baz) :-
     (   Bar = bar

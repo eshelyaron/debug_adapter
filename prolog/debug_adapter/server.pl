@@ -117,6 +117,18 @@ da_server_handled_debugee_message(_DebugeeThreadId,
     dap_response(Out, Seq0, RequestSeq, "stackTrace", _{stackFrames:StackFrames}),
     succ(Seq0, Seq).
 da_server_handled_debugee_message(_DebugeeThreadId,
+                                  scopes(RequestSeq, Scopes0),
+                                  Out, State, State, Seq0, Seq) :-
+    maplist(prolog_dap_scope, Scopes0, Scopes),
+    dap_response(Out, Seq0, RequestSeq, "scopes", _{scopes:Scopes}),
+    succ(Seq0, Seq).
+da_server_handled_debugee_message(_DebugeeThreadId,
+                                  variables(RequestSeq, Variables0),
+                                  Out, State, State, Seq0, Seq) :-
+    maplist(prolog_dap_scope, Variables0, Variables),
+    dap_response(Out, Seq0, RequestSeq, "variables", _{variables:Variables}),
+    succ(Seq0, Seq).
+da_server_handled_debugee_message(_DebugeeThreadId,
                                   exited(ExitCode),
                                   Out, State, State, Seq0, Seq) :-
     dap_event(Out, Seq0, "exited", _{exitCode:ExitCode}),
@@ -131,6 +143,29 @@ da_server_handled_debugee_message(DebugeeThreadId,
     select(debugee(_, DebugeeThreadId, _), State0, State).
 
 
+prolog_dap_scope(scope(Name, VariablesRef, SourceRef, Path, SL, SC, EL, EC),
+                 _{ name               : Name,
+                    variablesReference : VariablesRef,
+                    expensive          : false,
+                    source             : _{ name     : SourceName,
+                                            sourceReference : SourceRef,
+                                            path            : Path,
+                                            origin          : "Static"
+                                          },
+                    line               : SL,
+                    column             : SC,
+                    endLine            : EL,
+                    endColumn          : EC
+                  }
+                ) :-
+    !,
+    file_base_name(Path, SourceName).
+prolog_dap_scope(variable(Name, Value, VariablesRef),
+                 _{ name               : Name,
+                    variablesReference : VariablesRef,
+                    value              : Value
+                  }
+                ) :- !.
 prolog_dap_stack_frame(stack_frame(Id, Name, 0, null, _, _, _, _),  % foreign predicate
                        _{ id     : Id,
                           name   : Name,
@@ -219,6 +254,14 @@ da_server_command("restartFrame", RequestSeq, Message, Out, _W, State, State, Se
     dap_response(Out, Seq0, RequestSeq, "restartFrame"),
     succ(Seq0, Seq),
     maplist([debugee(PrologThreadId, _, _)]>>thread_send_message(PrologThreadId, restart_frame(FrameId)), State).
+da_server_command("scopes", RequestSeq, Message, _Out, _W, State, State, Seq, Seq) :-
+    _{ arguments:Args } :< Message,
+    _{ frameId:FrameId } :< Args,
+    maplist([debugee(PrologThreadId, _, _)]>>thread_send_message(PrologThreadId, scopes(RequestSeq, FrameId)), State).
+da_server_command("variables", RequestSeq, Message, _Out, _W, State, State, Seq, Seq) :-
+    _{ arguments:Args } :< Message,
+    _{ variablesReference:VariablesRef } :< Args,
+    maplist([debugee(PrologThreadId, _, _)]>>thread_send_message(PrologThreadId, variables(RequestSeq, VariablesRef)), State).
 da_server_command(Command, RequestSeq, _Message, Out, _W, State, State, Seq0, Seq) :-
     format(string(ErrorMessage), "Command \"~w\" is not implemented", [Command]),
     dap_error(Out, Seq0, RequestSeq, Command, ErrorMessage),

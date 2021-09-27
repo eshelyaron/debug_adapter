@@ -116,10 +116,126 @@ da_tracer_handled_message(stack_trace(RequestId), Port, Frame, _Choice, loop, S,
     current_prolog_flag(backtrace_depth, Depth),
     da_stack_frames(Depth, Frame, Port, StackFrames),
     da_debugee_emitted_message(stack_trace(RequestId, StackFrames), S, W).
+da_tracer_handled_message(scopes(RequestId, FrameId), Port, _Frame, _Choice, loop, S, W) :-
+    !,
+    da_scopes(FrameId, Port, Scopes),
+    da_debugee_emitted_message(scopes(RequestId, Scopes), S, W).
+da_tracer_handled_message(variables(RequestId, VariablesRef), Port, _Frame, _Choice, loop, S, W) :-
+    !,
+    debug(dap(tracer), "Handling message variables(~w, ~w) at port ~w", [RequestId, VariablesRef, Port]),
+    da_variables(VariablesRef, Port, Variables),
+    debug(dap(tracer), "got Variables = ~w", [Variables]),
+    da_debugee_emitted_message(variables(RequestId, Variables), S, W).
 da_tracer_handled_message(step_in, _Port, _Frame, _Choice, continue, _S, _W) :- !.
 da_tracer_handled_message(disconnect, _Port, _Frame, _Choice, nodebug, _S, _W) :- !.
 da_tracer_handled_message(continue, _Port, _Frame, _Choice, nodebug, _S, _W) :- !.
 da_tracer_handled_message(restart_frame(FrameId), _Port, _Frame, _Choice, retry(FrameId), _S, _W) :- !.
+
+:- det(da_variables/3).
+da_variables(VariablesRef, Port, Variables) :-
+    !,
+    debug(dap(tracer), "Parsing VariablesRef", []),
+    da_variables_reference_type_frame(VariablesRef, Type, Frame),
+    debug(dap(tracer), "got ~w ~w", [Type, Frame]),
+    (   Type == cached
+    ->  da_tracer_compound_arguments(Variables0, Frame),
+        indexed_arguments(1, Variables0, Variables)
+    ;   da_frame_clause(Frame, ClauseRef),
+        debug(dap(tracer), "Frame has clause", []),
+        (   clause_info(ClauseRef, _, _, VarNames)
+        ->  debug(dap(tracer), "clause has varnames", []),
+            da_variables_(Type, Frame, Port, VarNames, Variables)
+        ;   Variables = []  % TODO - fetch VarNames via decompilation for dynamic code
+        )
+    ).
+
+indexed_arguments(_, [], []) :- !.
+indexed_arguments(I0, [H0|T0], [variable(Name, H, ChildrenReference)|T]) :-
+    indexed_argument_name(I0, Name),
+    da_term_factorized(H0, ChildrenReference, H),
+    succ(I0, I1),
+    indexed_arguments(I1, T0, T).
+
+da_variables_(arguments, Frame, Port, VarNames, Variables) :-
+    !,
+    prolog_frame_attribute(Frame, predicate_indicator, PI),
+    debug(dap(tracer), "Frame has predicate_indicator", []),
+    unqualify(PI, _Functor/Arity),
+    debug(dap(tracer), "Frame has arity", []),
+    da_arguments(Frame, Port, 1, Arity, VarNames, Variables).
+
+da_arguments(Frame, Port, I, Arity, VarNames, [variable(Name, Value, ChildrenReference)|T]) :-
+    debug(dap(tracer), "~w =< ~w", [I, Arity]),
+    I =< Arity,
+    !,
+    arg(I, VarNames, Name0),
+    debug(dap(tracer), "Arg ~w has name ~w", [I, Name0]),
+    (   Name0 == '_'
+    ->  indexed_argument_name(I, Name)
+    ;   Name = Name0
+    ),
+    debug(dap(tracer), "Arg ~w has name ~w", [I, Name]),
+    prolog_frame_attribute(Frame, argument(I), Value0),
+    debug(dap(tracer), "Arg ~w has value ~w", [I, Value0]),
+    da_term_factorized(Value0, ChildrenReference, Value),
+    debug(dap(tracer), "Value is ~w(~w)", [Value, ChildrenReference]),
+    NI is I + 1,
+    da_arguments(Frame, Port, NI, Arity, VarNames, T).
+da_arguments(_, _, _, _, _, []).
+
+indexed_argument_name(I, N) :-
+    format(atom(N), "Argument #~w", [I]).
+
+da_term_factorized(Var, 0, '_') :-
+    var(Var),
+    !.
+da_term_factorized(Compound, Ref, Name) :-
+    compound(Compound),
+    !,
+    compound_name_arguments(Compound, Functor, Arguments),
+    length(Arguments, Arity),
+    format(atom(Name), '~w/~w', [Functor, Arity]),
+    da_tracer_cached_compound_arguments(Arguments, Ref0),
+    Ref is (Ref0 << 2) + 2.
+da_term_factorized(Term0, 0, Term) :-
+    term_string(Term0, Term).
+
+:- thread_local da_tracer_compound_arguments/2.
+
+da_tracer_cached_compound_arguments(Arguments, Ref) :-
+    (   da_tracer_compound_arguments(_, Ref0)
+    ->  succ(Ref0, Ref)
+    ;   Ref = 1
+    ),
+    asserta(da_tracer_compound_arguments(Arguments, Ref)).
+
+da_variables_reference_type_frame(VariablesRef, cached, CachedRef) :-
+    2 is VariablesRef /\ 3,
+    !,
+    CachedRef is VariablesRef >> 2.
+da_variables_reference_type_frame(VariablesRef, locals, Frame) :-
+    1 is VariablesRef /\ 3,
+    !,
+    Frame is VariablesRef >> 2.
+da_variables_reference_type_frame(VariablesRef, arguments, Frame) :-
+    0 is VariablesRef /\ 3,
+    !,
+    Frame is VariablesRef >> 2.
+
+
+:- det(da_scopes/3).
+da_scopes(Frame, unify, [scope("Arguments", ArgumentsRef, SourceRef, Path, SL, SC, EL, EC)]) :-
+    !,
+    da_frame_arguments_reference(Frame, ArgumentsRef),
+    prolog_frame_attribute(Frame, clause, ClauseRef),
+    da_clause_source_span(ClauseRef, neck, SourceRef, Path, SL, SC, EL, EC).
+da_scopes(_Frame, _Port, []).
+
+da_frame_arguments_reference(Frame, Ref) :-
+    Ref is (Frame << 2) + 0.
+
+da_frame_locals_reference(Frame, Ref) :-
+    Ref is (Frame << 2) + 1.
 
 :- det(da_stack_frames/4).
 da_stack_frames(Depth, F, Port, Frames) :-
@@ -300,6 +416,24 @@ da_frame_clause_or_goal_source_span(Frame, Direction, Ref, Path, SL, SC, EL, EC)
         )
     ).
 
+da_frame_clause(Frame, ClauseRef) :-
+    debug(dap(tracer), "da_frame_clause(~w, ClauseRef)", [Frame]),
+    (   prolog_frame_attribute(Frame, clause, ClauseRef)
+    ->  true
+    ;   prolog_frame_attribute(Frame, goal, Goal),
+        unqualify(Goal, Module, UGoal),
+        debug(dap(tracer), "prolog_frame_attribute(~w, goal, ~w:~w)", [Frame, Module, UGoal]),
+        (   predicate_property(Module:UGoal, foreign)
+        ->  false
+        ;   (   clause(Module:UGoal, _Body, ClauseRef)
+            ->  true
+            ;   functor(UGoal, Functor, Arity),
+                functor(UGoalTemplate, Functor, Arity),
+                clause(Module:UGoalTemplate, _Body, ClauseRef)
+            )
+        )
+    ).
+
 da_predicate_source_span(Goal, _Direction, 0, Path, SL, 0, null, null) :-
     predicate_property(Goal, file(Path)),
     predicate_property(Goal, line(SL)).
@@ -394,6 +528,9 @@ qualify(Goal, _, Goal) :-
     functor(Goal, :, 2),
     !.
 qualify(Goal, Module, Module:Goal).
+
+unqualify(Q, U) :-
+    unqualify(Q, _, U).
 
 unqualify(Module:Goal, Module, Goal) :-
     !.
