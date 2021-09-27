@@ -2,7 +2,9 @@ name: After Release
 
 on:
   release:
-    types: [published]
+    types: [released]
+
+  workflow_dispatch:
 
 jobs:
   verify-release:
