@@ -100,7 +100,7 @@ da_trace_interception(Port, Frame, Choice, Action) :-
 da_tracer_loop(Port, Frame, Choice, Action, ServerThreadId, ServerInterruptHandle) :-
     thread_get_message(Message),
     da_tracer_handled_message(Message, Port, Frame, Choice, Action0, ServerThreadId, ServerInterruptHandle),
-    (   Action0 = loop
+    (   Action0 == loop
     ->  da_tracer_loop(Port, Frame, Choice, Action, ServerThreadId, ServerInterruptHandle)
     ;   Action  = Action0
     ).

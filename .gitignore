@@ -17,3 +17,7 @@
 /test/Makefile
 /test/Makefile.in
 /test/server.plt
+/prolog/swipl_debug_adapter
+/test/server.log
+/test/server.trs
+/test/test-suite.log

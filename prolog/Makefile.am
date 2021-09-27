@@ -1,5 +1,5 @@
-bin_PROGRAMS = debug_adapter
-debug_adapter_SOURCES = $(addprefix $(srcdir)/debug_adapter/, main.pl server.pl tracer.pl protocol.pl client.pl)
+bin_PROGRAMS = swipl_debug_adapter
+swipl_debug_adapter_SOURCES = $(addprefix $(srcdir)/debug_adapter/, main.pl server.pl tracer.pl protocol.pl client.pl)
 
-debug_adapter$(EXEEXT):
-	@$(PROLOG) -o $@ -c $(debug_adapter_SOURCES) -O
+swipl_debug_adapter$(EXEEXT):
+	@$(PROLOG) -o $@ -c $(swipl_debug_adapter_SOURCES) -O

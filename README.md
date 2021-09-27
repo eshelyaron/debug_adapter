@@ -2,10 +2,18 @@
 This repository hosts the development of [DAP](https://microsoft.github.io/debug-adapter-protocol/) for [SWI-Prolog](https://www.swi-prolog.org/), written in Prolog.
 
 ## Installation
-Make sure you have SWI-Prolog (the `swipl` executable) installed, and run the following commands in the root of this repository to build the DAP server at `bin/debug_adapter`:
+Clone and build the server:
 ```sh
+$ git clone https://github.com/eshelyaron/debug_adapter.git
+$ cd debug_adapter
+$ ./configure
 $ make
+```
+
+`make` will build the Debug Adapter server at `prolog/swi_debug_adapter`. Optionally, run the test-suite and install the server to make it accessible from your $PATH:
+```sh
 $ make check
+$ make install
 ```
 
 If you're using GNU Emacs, load `elisp/dap-swi-prolog.el` and add the following lines to your `init.el`:
@@ -26,7 +34,8 @@ The two big milestones for this project are:
 Some of the needed steps towards these goals are:
 
 - [x] Stepping through the source code of a debugee with precise source positions
-- [ ] Stepping over, backwards, etc.
+- [x] Restarting debuged frames
+- [ ] Supporting more debug requests - `stepOut`, `stepBack`, `next`
 - [x] Providing source code for dynamic predicates through decompilation
 - [ ] Installing breakpoints at source positions
 - [ ] Providing information about variable bindings in each frame

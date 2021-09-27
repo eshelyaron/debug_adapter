@@ -13,8 +13,8 @@
 
 (require 'dap-mode)
 
-(defcustom dap-swi-prolog-debug-program (locate-file "debug_adapter" exec-path)
-  "The path to the SWI-Prolog debugger."
+(defcustom dap-swi-prolog-debug-program (locate-file "swipl_debug_adapter" exec-path)
+  "The path to the SWI-Prolog debug adapter."
   :group 'dap-swi-prolog
   :type '(repeat string))
 
