@@ -34,7 +34,10 @@ main(Argv) :-
     ( option(version(true), Opts) -> version(Version), format("SWI-Prolog Debug Adapter Version ~w~n", [Version])
     ; option(help(   true), Opts) -> opt_help(OptsSpec, Help), write(Help)
     ; set_prolog_flag(toplevel_prompt, ''),
-      ( option(debug(  true), Opts) -> debug(dap(tracer)); true ),
+      (   option(debug(  true), Opts)
+      ->  debug(dap(_))
+      ;   true
+      ),
       current_input(In),
       current_output(Out),
       da_server([in(In), out(Out)])
