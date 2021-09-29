@@ -113,38 +113,38 @@ prolog_dap_stopped_reason(Port, _, Reason, null, null) :-
 :- det(da_tracer_handled_message/7).
 da_tracer_handled_message(stack_trace(RequestId), Port, Frame, _Choice, loop, S, W) :-
     !,
-    current_prolog_flag(backtrace_depth, Depth),
-    da_stack_frames(Depth, Frame, Port, StackFrames),
-    da_debugee_emitted_message(stack_trace(RequestId, StackFrames), S, W).
-da_tracer_handled_message(scopes(RequestId, FrameId), Port, _Frame, _Choice, loop, S, W) :-
+    da_stack_frames(Frame, StackFrames0),
+    maplist(da_ancestral_frame_enriched, StackFrames0, StackFrames),
+    prolog_frame_attribute(Frame, predicate_indicator, PI0),
+    term_string(PI0, PI),
+    da_frame_port_source_span(Frame, Port, SourceRef, Path, SL, SC, EL, EC),
+    ActiveFrame = stack_frame(Frame, PI, SourceRef, Path, SL, SC, EL, EC),
+    da_debugee_emitted_message(stack_trace(RequestId, [ActiveFrame | StackFrames]), S, W).
+da_tracer_handled_message(scopes(RequestId, FrameId), _Port, _Frame, _Choice, loop, S, W) :-
     !,
-    da_scopes(FrameId, Port, Scopes),
+    da_scopes(FrameId, Scopes),
     da_debugee_emitted_message(scopes(RequestId, Scopes), S, W).
-da_tracer_handled_message(variables(RequestId, VariablesRef), Port, _Frame, _Choice, loop, S, W) :-
+da_tracer_handled_message(variables(RequestId, VariablesRef), _Port, _Frame, _Choice, loop, S, W) :-
     !,
-    debug(dap(tracer), "Handling message variables(~w, ~w) at port ~w", [RequestId, VariablesRef, Port]),
-    da_variables(VariablesRef, Port, Variables),
-    debug(dap(tracer), "got Variables = ~w", [Variables]),
+    da_variables(VariablesRef, Variables),
     da_debugee_emitted_message(variables(RequestId, Variables), S, W).
 da_tracer_handled_message(step_in, _Port, _Frame, _Choice, continue, _S, _W) :- !.
 da_tracer_handled_message(disconnect, _Port, _Frame, _Choice, nodebug, _S, _W) :- !.
 da_tracer_handled_message(continue, _Port, _Frame, _Choice, nodebug, _S, _W) :- !.
 da_tracer_handled_message(restart_frame(FrameId), _Port, _Frame, _Choice, retry(FrameId), _S, _W) :- !.
 
-:- det(da_variables/3).
-da_variables(VariablesRef, Port, Variables) :-
+:- det(da_variables/2).
+da_variables(VariablesRef, Variables) :-
     !,
-    debug(dap(tracer), "Parsing VariablesRef", []),
     da_variables_reference_type_frame(VariablesRef, Type, Frame),
-    debug(dap(tracer), "got ~w ~w", [Type, Frame]),
     (   Type == cached
     ->  da_tracer_compound_arguments(Variables0, Frame),
         indexed_arguments(1, Variables0, Variables)
     ;   da_frame_clause(Frame, ClauseRef),
-        debug(dap(tracer), "Frame has clause", []),
-        (   clause_info(ClauseRef, _, _, VarNames)
-        ->  debug(dap(tracer), "clause has varnames", []),
-            da_variables_(Type, Frame, Port, VarNames, Variables)
+        (   ClauseRef == foreign
+        ->  Variables = []
+        ;   clause_info(ClauseRef, _, _, VarNames)
+        ->  da_frame_variables(Frame, Type, VarNames, Variables)
         ;   Variables = []  % TODO - fetch VarNames via decompilation for dynamic code
         )
     ).
@@ -156,32 +156,51 @@ indexed_arguments(I0, [H0|T0], [variable(Name, H, ChildrenReference)|T]) :-
     succ(I0, I1),
     indexed_arguments(I1, T0, T).
 
-da_variables_(arguments, Frame, Port, VarNames, Variables) :-
+da_frame_variables(Frame, Type, VarNames, Variables) :-
     !,
     prolog_frame_attribute(Frame, predicate_indicator, PI),
-    debug(dap(tracer), "Frame has predicate_indicator", []),
     unqualify(PI, _Functor/Arity),
-    debug(dap(tracer), "Frame has arity", []),
-    da_arguments(Frame, Port, 1, Arity, VarNames, Variables).
+    da_frame_arity_variables(Frame, Arity, Type, VarNames, Variables).
 
-da_arguments(Frame, Port, I, Arity, VarNames, [variable(Name, Value, ChildrenReference)|T]) :-
-    debug(dap(tracer), "~w =< ~w", [I, Arity]),
-    I =< Arity,
+da_frame_arity_variables(_, 0, arguments, _, []) :- !.
+da_frame_arity_variables(Frame, Arity, arguments, VarNames, Variables) :-
     !,
-    arg(I, VarNames, Name0),
-    debug(dap(tracer), "Arg ~w has name ~w", [I, Name0]),
-    (   Name0 == '_'
-    ->  indexed_argument_name(I, Name)
-    ;   Name = Name0
-    ),
-    debug(dap(tracer), "Arg ~w has name ~w", [I, Name]),
-    prolog_frame_attribute(Frame, argument(I), Value0),
-    debug(dap(tracer), "Arg ~w has value ~w", [I, Value0]),
-    da_term_factorized(Value0, ChildrenReference, Value),
-    debug(dap(tracer), "Value is ~w(~w)", [Value, ChildrenReference]),
-    NI is I + 1,
-    da_arguments(Frame, Port, NI, Arity, VarNames, T).
-da_arguments(_, _, _, _, _, []).
+    da_frame_arguments(Frame, 1, Arity, VarNames, Variables).
+da_frame_arity_variables(Frame, Arity, locals, VarNames, Variables) :-
+    !,
+    succ(Arity, I),
+    da_frame_locals(Frame, I, VarNames, Variables).
+
+da_frame_arguments(Frame, I, Arity, VarNames, Variables) :-
+    (   I =< Arity
+    ->  arg(I, VarNames, Name0),
+        (   Name0 == '_'
+        ->  indexed_argument_name(I, Name)
+        ;   Name = Name0
+        ),
+        prolog_frame_attribute(Frame, argument(I), Value0),
+        da_term_factorized(Value0, ChildrenReference, Value),
+        Variables = [variable(Name, Value, ChildrenReference)|T],
+        NI is I + 1,
+        da_frame_arguments(Frame, NI, Arity, VarNames, T)
+    ;   Variables = []
+    ).
+
+da_frame_locals(Frame, I, VarNames, Variables) :-
+    (   arg(I, VarNames, Name0)
+    ->  (   Name0 == '_'
+        ->  indexed_argument_name(I, Name)
+        ;   Name = Name0
+        ),
+        (   prolog_frame_attribute(Frame, argument(I), Value0)
+        ->  da_term_factorized(Value0, ChildrenReference, Value)
+        ;   da_term_factorized(_, ChildrenReference, Value)
+        ),
+        Variables = [variable(Name, Value, ChildrenReference)|T],
+        NI is I + 1,
+        da_frame_locals(Frame, NI, VarNames, T)
+    ;   Variables = []
+    ).
 
 indexed_argument_name(I, N) :-
     format(atom(N), "Argument #~w", [I]).
@@ -223,13 +242,13 @@ da_variables_reference_type_frame(VariablesRef, arguments, Frame) :-
     Frame is VariablesRef >> 2.
 
 
-:- det(da_scopes/3).
-da_scopes(Frame, unify, [scope("Arguments", ArgumentsRef, SourceRef, Path, SL, SC, EL, EC)]) :-
-    !,
+:- det(da_scopes/2).
+da_scopes(Frame, [scope("Arguments", ArgumentsRef, SourceRef, Path, SL, SC, EL, EC),
+                  scope("Locals", LocalsRef, SourceRef, Path, SL, SC, EL, EC)
+                 ]) :-
     da_frame_arguments_reference(Frame, ArgumentsRef),
-    prolog_frame_attribute(Frame, clause, ClauseRef),
-    da_clause_source_span(ClauseRef, neck, SourceRef, Path, SL, SC, EL, EC).
-da_scopes(_Frame, _Port, []).
+    da_frame_locals_reference(Frame, LocalsRef),
+    da_frame_clause_or_goal_source_span(Frame, entry, SourceRef, Path, SL, SC, EL, EC).
 
 da_frame_arguments_reference(Frame, Ref) :-
     Ref is (Frame << 2) + 0.
@@ -237,50 +256,31 @@ da_frame_arguments_reference(Frame, Ref) :-
 da_frame_locals_reference(Frame, Ref) :-
     Ref is (Frame << 2) + 1.
 
-:- det(da_stack_frames/4).
-da_stack_frames(Depth, F, Port, Frames) :-
-    (   prolog_frame_attribute(F, hidden, true), debug(dap(tracer), "skipping hidden frame ~w", [F])
-    ->  RestFrames = Frames,
-        ND is Depth
-    ;   da_frame_port_source_span(F, Port, SourceRef, Path, SL, SC, EL, EC),
-        prolog_frame_attribute(F, predicate_indicator, PI0),
-        term_string(PI0, PI),
-        Frames = [stack_frame(F, PI, SourceRef, Path, SL, SC, EL, EC)|RestFrames],
-        ND is Depth - 1
-    ),
-    (   prolog_frame_attribute(F, parent, Parent),
-        (   prolog_frame_attribute(F, pc, PCParent)
-        ->  true
-        ;   PCParent = foreign
+
+:- det(da_stack_frames/2).
+da_stack_frames(F, Frames) :-
+    (   prolog_frame_attribute(F, parent, P)
+    ->  (   prolog_frame_attribute(P, hidden, true)
+        ->  da_stack_frames(P, Frames)
+        ;   (   prolog_frame_attribute(F, pc, PC)
+            ->  true
+            ;   PC = foreign
+            ),
+            Frames = [P-PC|T],
+            da_stack_frames(P, T)
         )
-    ->  da_ancestral_stack_frames(ND, Parent, PCParent, RestFrames)
-    ;   RestFrames = []
+    ;   Frames = []
     ).
 
-:- det(da_ancestral_stack_frames/4).
-da_ancestral_stack_frames(Depth, F, PC, Frames) :-
-    (   prolog_frame_attribute(F, hidden, true), debug(dap(tracer), "skipping hidden frame ~w", [F])
-    ->  RestFrames = Frames,
-        ND is Depth
-    ;   da_frame_pc_source_span(F, PC, SourceRef, Path, SL, SC, EL, EC),
-        prolog_frame_attribute(F, predicate_indicator, PI0),
-        term_string(PI0, PI),
-        Frames = [stack_frame(F, PI, SourceRef, Path, SL, SC, EL, EC)|RestFrames],
-        ND is Depth - 1
-    ),
-    (   prolog_frame_attribute(F, parent, Parent),
-        (   prolog_frame_attribute(F, pc, PCParent)
-        ->  true
-        ;   PCParent = foreign
-        )
-    ->  da_ancestral_stack_frames(ND, Parent, PCParent, RestFrames)
-    ;   RestFrames = []
-    ).
+:- det(da_ancestral_frame_enriched/2).
+da_ancestral_frame_enriched(F-PC, stack_frame(F, PI, SourceRef, Path, SL, SC, EL, EC)) :-
+    prolog_frame_attribute(F, predicate_indicator, PI0),
+    term_string(PI0, PI),
+    da_frame_pc_source_span(F, PC, SourceRef, Path, SL, SC, EL, EC).
 
 :- det(da_frame_pc_source_span/8).
 da_frame_pc_source_span(Frame, foreign, Ref, Path, SL, SC, EL, EC) :-
-    prolog_frame_attribute(Frame, goal, Goal),
-    da_foreign_goal_source_span(Goal, Ref, Path, SL, SC, EL, EC), !.
+    da_foreign_frame_source_span(Frame, Ref, Path, SL, SC, EL, EC), !.
 da_frame_pc_source_span(Frame, PC, Ref, Path, SL, SC, EL, EC) :-
     prolog_frame_attribute(Frame, clause, ClauseRef),
     da_call_site_source_span(ClauseRef, PC, Ref, Path, SL, SC, EL, EC), !.
@@ -288,12 +288,9 @@ da_frame_pc_source_span(Frame, PC, Ref, Path, SL, SC, EL, EC) :-
 :- det(da_frame_port_source_span/8).
 da_frame_port_source_span(Frame, Port, Ref, Path, SL, SC, EL, EC) :-
     da_port_clause_direction(Port, Direction),
-    debug(dap(tracer), "da_frame_port_source_span(~w, ~w[~w], ...", [Frame, Port, Direction]),
     !,
-    (   prolog_frame_attribute(Frame, pc, PC),
-        debug(dap(tracer), "prolog_frame_attribute(~w, pc, ~w)", [Frame, PC])
+    (   prolog_frame_attribute(Frame, pc, PC)
     ->  prolog_frame_attribute(Frame, parent, ParentFrame),
-        debug(dap(tracer), "prolog_frame_attribute(~w, parent, ~w)", [Frame, ParentFrame]),
         (   da_hidden_frame(ParentFrame)
         ->  da_frame_clause_or_goal_source_span(Frame, Direction, Ref, Path, SL, SC, EL, EC)
         ;   prolog_frame_attribute(ParentFrame, clause, ParentClause),
@@ -303,12 +300,10 @@ da_frame_port_source_span(Frame, Port, Ref, Path, SL, SC, EL, EC) :-
     ).
 da_frame_port_source_span(Frame, Port, Ref, Path, SL, SC, EL, EC) :-
     da_port_pc(Port, PC),
-    debug(dap(tracer), "da_frame_port_source_span(~w, redo(~w), ...", [Frame, PC]),
     !,
     prolog_frame_attribute(Frame, clause, ClauseRef),
     da_call_site_source_span(ClauseRef, PC, Ref, Path, SL, SC, EL, EC).
 da_frame_port_source_span(Frame, unify, Ref, Path, SL, SC, EL, EC) :-
-    debug(dap(tracer), "da_frame_port_source_span(~w, unify, ...", [Frame]),
     !,
     da_frame_clause_or_goal_source_span(Frame, neck, Ref, Path, SL, SC, EL, EC).
 
@@ -329,10 +324,8 @@ da_exit_port(exception(_)) :- !.
 
 :- det(da_clause_source_span/8).
 da_clause_source_span(ClauseRef, Direction, 0, Path, SL, SC, EL, EC) :-
-    debug(dap(tracer), "da_clause_head_source_span(~w, ~w, ...", [ClauseRef, Direction]),
-    clause_info(ClauseRef, Path, TPos, Vars),
+    clause_info(ClauseRef, Path, TPos, _),
     !,
-    debug(dap(tracer), "clause_info(~w, ~w, ~w, ~w)", [ClauseRef, Path, TPos, Vars]),
     da_clause_static_source_span(ClauseRef, TPos, Direction, Path, SL, SC, EL, EC).
 da_clause_source_span(ClauseRef, Direction, Ref, Path, SL, SC, EL, EC) :-
     da_clause_dynamic_source_span(ClauseRef, Direction, Ref, Path, SL, SC, EL, EC).
@@ -353,7 +346,7 @@ da_clause_dynamic_source_span_(true, HeadPos, entry, Path, SL, SC, EL, EC) :-
     file_offset_line_column(Path, SO, SL, SC),
     arg(2, HeadPos, EO),
     file_offset_line_column(Path, EO, EL, EC).
-da_clause_dynamic_source_span_(_, term_position(_, _, _, _, [HeadPos]), entry, Path, SL, SC, EL, EC) :-
+da_clause_dynamic_source_span_(_, term_position(_, _, _, _, [HeadPos|_]), entry, Path, SL, SC, EL, EC) :-
     !,
     arg(1, HeadPos, SO),
     file_offset_line_column(Path, SO, SL, SC),
@@ -394,43 +387,25 @@ da_clause_static_source_span(_ClauseRef, term_position(_F, _T, SO, EO, _), neck,
     file_offset_line_column(Path, EO, EL, EC).
 
 da_frame_clause_or_goal_source_span(Frame, Direction, Ref, Path, SL, SC, EL, EC) :-
-    debug(dap(tracer), "da_frame_clause_or_goal_source_span(~w, ~w, ...", [Frame, Direction]),
-    (   prolog_frame_attribute(Frame, clause, ClauseRef),
-        debug(dap(tracer), "prolog_frame_attribute(~w, clause, ~w)", [Frame, ClauseRef])
-    ->  da_clause_source_span(ClauseRef, Direction, Ref, Path, SL, SC, EL, EC)
-    ;   prolog_frame_attribute(Frame, goal, Goal),
-        unqualify(Goal, Module, UGoal),
-        debug(dap(tracer), "prolog_frame_attribute(~w, goal, ~w:~w)", [Frame, Module, UGoal]),
-        (   predicate_property(Module:UGoal, foreign)
-        ->  da_foreign_goal_source_span(Module:UGoal, Direction, Ref, Path, SL, SC, EL, EC)
-        ;   (   clause(Module:UGoal, _Body, ClauseRef)
-            ->  da_clause_source_span(ClauseRef, Direction, Ref, Path, SL, SC, EL, EC)
-            ;   functor(UGoal, Functor, Arity),
-                functor(UGoalTemplate, Functor, Arity),
-                clause(Module:UGoalTemplate, _Body, ClauseRef)
-            ->  da_clause_source_span(ClauseRef, Direction, Ref, Path, SL, SC, EL, EC)
-            ;   da_predicate_source_span(Module:UGoal, Direction, Ref, Path, SL, SC, EL, EC)
-            ->  true
-            ;   da_foreign_goal_source_span(Module:UGoal, Direction, Ref, Path, SL, SC, EL, EC)
-            )
-        )
+    da_frame_clause(Frame, ClauseRef),
+    (   ClauseRef == foreign
+    ->  da_foreign_frame_source_span(Frame, Direction, Ref, Path, SL, SC, EL, EC)
+    ;   da_clause_source_span(ClauseRef, Direction, Ref, Path, SL, SC, EL, EC)
     ).
 
 da_frame_clause(Frame, ClauseRef) :-
-    debug(dap(tracer), "da_frame_clause(~w, ClauseRef)", [Frame]),
     (   prolog_frame_attribute(Frame, clause, ClauseRef)
     ->  true
     ;   prolog_frame_attribute(Frame, goal, Goal),
         unqualify(Goal, Module, UGoal),
-        debug(dap(tracer), "prolog_frame_attribute(~w, goal, ~w:~w)", [Frame, Module, UGoal]),
-        (   predicate_property(Module:UGoal, foreign)
-        ->  false
-        ;   (   clause(Module:UGoal, _Body, ClauseRef)
+        (   predicate_property(Module:UGoal, interpreted)
+        ->  (   clause(Module:UGoal, _Body, ClauseRef)
             ->  true
             ;   functor(UGoal, Functor, Arity),
                 functor(UGoalTemplate, Functor, Arity),
                 clause(Module:UGoalTemplate, _Body, ClauseRef)
             )
+        ;   ClauseRef = foreign
         )
     ).
 
@@ -446,10 +421,10 @@ da_hidden_frame(Frame) :-
 da_hidden_predicate(Goal) :- predicate_property(Goal, nodebug), !.
 da_hidden_predicate(Goal) :- predicate_property(Goal, foreign), !.
 
-da_foreign_goal_source_span(Goal, Ref, Path, SL, SC, EL, EC) :-
-    da_foreign_goal_source_span(Goal, entry, Ref, Path, SL, SC, EL, EC).
+da_foreign_frame_source_span(Frame, Ref, Path, SL, SC, EL, EC) :-
+    da_foreign_frame_source_span(Frame, entry, Ref, Path, SL, SC, EL, EC).
 
-da_foreign_goal_source_span(_Goal, _Direction, 0, null, 0, 0, null, null).
+da_foreign_frame_source_span(_Frame, _Direction, 0, null, 0, 0, null, null).
 
 da_call_site_source_span(ClauseRef, PC, Ref, Path, SL, SC, EL, EC) :-
     da_call_site_source_span(ClauseRef, PC, entry, Ref, Path, SL, SC, EL, EC).

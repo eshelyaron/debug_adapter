@@ -27,10 +27,11 @@ da_server(Options) :-
     da_server_loop([], 1, In, Out, R, W).
 
 :- det(da_server_loop/6).
-da_server_loop([], exiting(_), _In, _Out, R, W) :-
+da_server_loop([], exiting(Seq), _In, Out, R, W) :-
     !,
     close(R),
     close(W),
+    dap_event(Out, Seq, "exited", _{exitCode:0}),
     thread_exit(0).
 da_server_loop(State0, exiting(Seq0), In, Out, R, W) :-
     !,
@@ -38,7 +39,6 @@ da_server_loop(State0, exiting(Seq0), In, Out, R, W) :-
     da_server_exiting_handled_stream(Inputs, Out, W, State0, State, Seq0, Seq),
     da_server_loop(State, exiting(Seq), In, Out, R, W).
 da_server_loop(State0, Seq0, In, Out, R, W) :-
-    debug(dap(server), "Waiting", []),
     wait_for_input([In, R], Inputs, infinite),
     da_server_handled_streams(In, R, Inputs, Out, W, State0, State, Seq0, Seq),
     da_server_loop(State, Seq, In, Out, R, W).
@@ -129,10 +129,10 @@ da_server_handled_debugee_message(_DebugeeThreadId,
     dap_response(Out, Seq0, RequestSeq, "variables", _{variables:Variables}),
     succ(Seq0, Seq).
 da_server_handled_debugee_message(_DebugeeThreadId,
-                                  exited(ExitCode),
-                                  Out, State, State, Seq0, Seq) :-
-    dap_event(Out, Seq0, "exited", _{exitCode:ExitCode}),
-    succ(Seq0, Seq).
+                                  exited(_ExitCode),
+                                  _Out, State, State, Seq, Seq).
+%    dap_event(Out, Seq0, "exited", _{exitCode:ExitCode}),
+%    succ(Seq0, Seq).
 da_server_handled_debugee_message(DebugeeThreadId,
                                   thread_exited,
                                   Out, State0, State, Seq0, Seq) :-

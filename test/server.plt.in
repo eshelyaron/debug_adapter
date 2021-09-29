@@ -72,7 +72,6 @@ test(launch, [ setup(dapipe(SIn, SOut, CIn, COut)),
     _{ supportsConfigurationDoneRequest : true } :< Body,
     source_file(user:da_server_test_marker_predicate, ThisFile),
     file_directory_name(ThisFile, CWD),
-    debug(dap(test), "CWD: ~w", [CWD]),
     dap_request_response(CIn, COut, 2, "launch", _{ cwd    : CWD,
                                                     module : "@srcdir@/target/foo.pl",
                                                     goal   : foo
