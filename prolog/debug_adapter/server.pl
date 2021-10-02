@@ -5,8 +5,30 @@
        ]
    ).
 
+:- predicate_options(da_server/1, 1, [ in(+stream),
+                                       out(+stream)
+                                     ]
+                    ).
+
+/** <module> SWI-Prolog Debug Adapter Server
+
+This module contains the core logic for handling DAP request sent by DAP clients which are most
+commonly IDE extensions controlled interactivly by a progammer. The main entry point is da_server/1.
+
+The implementation is most dominently guided by the [DAP
+specification](https://microsoft.github.io/debug-adapter-protocol/specification).
+*/
+
 :- use_module(tracer).
 :- use_module(protocol).
+
+%!  da_server(+Options) is det.
+%
+%   Starts the DAP server in the current thread. Options:
+%    - in(+Stream)
+%      Required. Stream will be used by the server to read incoming messages from the client.
+%    - out(+Stream)
+%      Required. Stream will be used by the server to emit outgoing messages to the client.
 
 :- det(da_server/1).
 da_server(Options) :-
@@ -125,7 +147,7 @@ da_server_handled_debugee_message(_DebugeeThreadId,
 da_server_handled_debugee_message(_DebugeeThreadId,
                                   variables(RequestSeq, Variables0),
                                   Out, State, State, Seq0, Seq) :-
-    maplist(prolog_dap_scope, Variables0, Variables),
+    maplist(prolog_dap_variable, Variables0, Variables),
     dap_response(Out, Seq0, RequestSeq, "variables", _{variables:Variables}),
     succ(Seq0, Seq).
 da_server_handled_debugee_message(_DebugeeThreadId,
@@ -143,62 +165,58 @@ da_server_handled_debugee_message(DebugeeThreadId,
     select(debugee(_, DebugeeThreadId, _), State0, State).
 
 
-prolog_dap_scope(scope(Name, VariablesRef, SourceRef, Path, SL, SC, EL, EC),
+prolog_dap_scope(scope(Name, VariablesRef, SourceSpan),
                  _{ name               : Name,
                     variablesReference : VariablesRef,
                     expensive          : false,
-                    source             : _{ name     : SourceName,
-                                            sourceReference : SourceRef,
-                                            path            : Path,
-                                            origin          : "Static"
-                                          },
+                    source             : DAPSource,
                     line               : SL,
                     column             : SC,
                     endLine            : EL,
                     endColumn          : EC
                   }
                 ) :-
+    prolog_dap_source_span(SourceSpan, DAPSource, SL, SC, EL, EC).
+
+prolog_dap_variable(variable(Name, Value, VariablesRef),
+                    _{ name               : Name,
+                       variablesReference : VariablesRef,
+                       value              : Value
+                     }
+                   ) :- !.
+
+prolog_dap_source_span(span(File, SL, SC, EL, EC),
+                       _{ name            : Name,
+                          path            : File,
+                          origin          : "Static"
+                        },
+                       SL, SC, EL, EC
+                      ) :-
     !,
-    file_base_name(Path, SourceName).
-prolog_dap_scope(variable(Name, Value, VariablesRef),
-                 _{ name               : Name,
-                    variablesReference : VariablesRef,
-                    value              : Value
-                  }
-                ) :- !.
-prolog_dap_stack_frame(stack_frame(Id, Name, 0, null, _, _, _, _),  % foreign predicate
-                       _{ id     : Id,
-                          name   : Name,
-                          line   : 0,
-                          column : 0
-                        }
-                      ) :- !.
-prolog_dap_stack_frame(stack_frame(Id, Name, Ref, null, _, _, _, _),
-                       _{ id     : Id,
-                          name   : Name,
-                          line   : 0,
-                          column : 0,
-                          source : _{ name            : Name,
-                                      sourceReference : Ref,
-                                      origin          : "Dynamic"
-                                    }
-                        }
-                      ) :- !.
-prolog_dap_stack_frame(stack_frame(Id, Name, Ref, Path, SL, SC, EL, EC),
-                       _{ id        : Id,
-                          name      : Name,
-                          line      : SL,
-                          column    : SC,
-                          endLine   : EL,
-                          endColumn : EC,
-                          source    : _{ name            : BaseName,
-                                         path            : Path,
-                                         sourceReference : Ref,
-                                         origin          : "Static"
-                                       }
+    file_base_name(File, Name).
+prolog_dap_source_span(reference(SourceReference),
+                       _{ name            : "*dynamic*",
+                          sourceReference : SourceReference,
+                          origin          : "Dynamic"
+                        },
+                       0, 0, null, null
+                      ).
+
+prolog_dap_stack_frame(stack_frame(Id, PI, _Alternative, SourceSpan),
+                       _{ id          : Id,
+                          name        : Name,
+                          line        : SL,
+                          column      : SC,
+                          endLine     : EL,
+                          endColumn   : EC,
+                          source      : DAPSource
+%                         alternative : DAPAlternative  experiment with a custom protocol extension
                         }
                       ) :-
-    file_base_name(Path, BaseName).
+%   prolog_dap_alternative(Alternative, DAPAlternative),
+    term_string(PI, Name),
+    prolog_dap_source_span(SourceSpan, DAPSource, SL, SC, EL, EC).
+
 
 da_server_handled_message("request", RequestSeq, Message0, Out, W, State0, State, Seq0, Seq) :-
     del_dict(command, Message0, Command, Message),
@@ -257,11 +275,11 @@ da_server_command("restartFrame", RequestSeq, Message, Out, _W, State, State, Se
 da_server_command("scopes", RequestSeq, Message, _Out, _W, State, State, Seq, Seq) :-
     _{ arguments:Args } :< Message,
     _{ frameId:FrameId } :< Args,
-    maplist([debugee(PrologThreadId, _, _)]>>thread_send_message(PrologThreadId, scopes(RequestSeq, FrameId)), State).
+    maplist({RequestSeq, FrameId}/[debugee(PrologThreadId, _, _)]>>thread_send_message(PrologThreadId, scopes(RequestSeq, FrameId)), State).
 da_server_command("variables", RequestSeq, Message, _Out, _W, State, State, Seq, Seq) :-
     _{ arguments:Args } :< Message,
     _{ variablesReference:VariablesRef } :< Args,
-    maplist([debugee(PrologThreadId, _, _)]>>thread_send_message(PrologThreadId, variables(RequestSeq, VariablesRef)), State).
+    maplist({RequestSeq, VariablesRef}/[debugee(PrologThreadId, _, _)]>>thread_send_message(PrologThreadId, variables(RequestSeq, VariablesRef)), State).
 da_server_command(Command, RequestSeq, _Message, Out, _W, State, State, Seq0, Seq) :-
     format(string(ErrorMessage), "Command \"~w\" is not implemented", [Command]),
     dap_error(Out, Seq0, RequestSeq, Command, ErrorMessage),
@@ -287,11 +305,9 @@ da_initialized(_).
 
 da_launched(Args, W, debugee(PrologThreadId, ThreadId, Goal)) :-
     _{ cwd: CWD, module: ModulePath, goal: GoalString } :< Args,
-    debug(dap(server), "Changing into directory ~w", [CWD]),
     cd(CWD),
     term_string(Goal, GoalString),
     thread_self(ServerThreadId),
-    debug(dap(server), "Launching debugee thread", []),
     thread_create(da_debugee(ModulePath, Goal, ServerThreadId, W), PrologThreadId),
     thread_property(PrologThreadId, id(ThreadId)).
 

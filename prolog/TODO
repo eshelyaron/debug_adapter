@@ -1,0 +1,10 @@
+* TODO `disconnect` handling is a bit hacky, should be revised
+* TODO `stopped` events should report a `reason` that conforms to the DAP specs.
+   Currently (v0.2.1) we report the name of the *port* as the `reason`, because `dap-mode` only
+   displays the `reason` field by default. This is especially important if the `reason` should be
+   `expection`, in which case [[file:~/checkouts/dap-mode/dap-mode.el::when (string= "exception" reason][`dap-mode` has a special case for retrieving further info]].
+* TODO Emit `output` events when applicable
+* TODO Support breakpoints
+* TODO Utilize the DAP Json Schema
+  DAP is defined by machine-reabable Json Schema draft 4, we should utilize it to eliminate manual
+  implementation of many procotol details.
