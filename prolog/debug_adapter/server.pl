@@ -271,7 +271,7 @@ da_server_command("restartFrame", RequestSeq, Message, Out, _W, State, State, Se
     _{ frameId   : FrameId } :< Args,
     dap_response(Out, Seq0, RequestSeq, "restartFrame"),
     succ(Seq0, Seq),
-    maplist([debugee(PrologThreadId, _, _)]>>thread_send_message(PrologThreadId, restart_frame(FrameId)), State).
+    maplist({FrameId}/[debugee(PrologThreadId, _, _)]>>thread_send_message(PrologThreadId, restart_frame(FrameId)), State).
 da_server_command("scopes", RequestSeq, Message, _Out, _W, State, State, Seq, Seq) :-
     _{ arguments:Args } :< Message,
     _{ frameId:FrameId } :< Args,
