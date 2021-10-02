@@ -1,5 +1,5 @@
 AC_PREREQ([2.69])
-AC_INIT([debug_adapter], [0.2.2], [eshelshay.yaron@gmail.com])
+AC_INIT([debug_adapter], [0.2.3], [eshelshay.yaron@gmail.com])
 AC_PATH_PROG([PROLOG], [swipl])
 AC_PROG_MKDIR_P
 AM_INIT_AUTOMAKE([-Wall foreign subdir-objects dist-zip])
