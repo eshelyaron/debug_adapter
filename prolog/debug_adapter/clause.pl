@@ -120,7 +120,7 @@ da_clause_source_term(_ClauseRef, Module, DecompiledClause, VariablesOffset, Sou
 
 %!  da_clause_decompiled(+ClauseRef, +Module, +DecompiledClause) is det.
 
-:- det(da_clause_decompiled/3).
+:- det(da_clause_decompiled/4).
 da_clause_decompiled(ClauseRef, Module, DecompiledClause, VariablesOffset) :-
     '$clause'(Head0, Body, ClauseRef, VariablesOffset),
     qualified(Head0, Module, Head),

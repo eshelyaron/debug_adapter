@@ -8,3 +8,8 @@
 * TODO Utilize the DAP Json Schema
   DAP is defined by machine-reabable Json Schema draft 4, we should utilize it to eliminate manual
   implementation of many procotol details.
+* TODO Use `predicate_options/1` for documentation and safety where warranted
+* TODO Consider using [[https://www.swi-prolog.org/pldoc/doc_for?object=message_hook/3][`message_link/3`]] to implement the DAP `output` event
+* TODO Consider the security of the debugger
+** TODO Log every user requested executed goal
+** TODO Consider verifying the safety of requested goals with [[https://www.swi-prolog.org/pldoc/doc_for?object=sandbox%3Asafe_goal/1][safe_goal/1]]

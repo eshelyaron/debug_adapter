@@ -202,20 +202,29 @@ prolog_dap_source_span(reference(SourceReference),
                        0, 0, null, null
                       ).
 
-prolog_dap_stack_frame(stack_frame(Id, PI, _Alternative, SourceSpan),
-                       _{ id          : Id,
-                          name        : Name,
-                          line        : SL,
-                          column      : SC,
-                          endLine     : EL,
-                          endColumn   : EC,
-                          source      : DAPSource
-%                         alternative : DAPAlternative  experiment with a custom protocol extension
+prolog_dap_stack_frame(stack_frame(Id, InFrameLabel, PI, _Alternative, SourceSpan),
+                       _{ id                          : Id,
+                          name                        : Name,
+                          line                        : SL,
+                          column                      : SC,
+                          endLine                     : EL,
+                          endColumn                   : EC,
+                          source                      : DAPSource,
+%                         alternative                 : DAPAlternative % for experiment with a custom protocol extension
+                          instructionPointerReference : DAPLabel
                         }
                       ) :-
 %   prolog_dap_alternative(Alternative, DAPAlternative),
     term_string(PI, Name),
-    prolog_dap_source_span(SourceSpan, DAPSource, SL, SC, EL, EC).
+    prolog_dap_source_span(SourceSpan, DAPSource, SL, SC, EL, EC),
+    prolog_dap_in_frame_label(InFrameLabel, DAPLabel).
+
+prolog_dap_in_frame_label(port(Port), DAPLabel) :-
+    !,
+    functor(Port, PortName, _Arity),
+    atom_string(PortName, DAPLabel).
+prolog_dap_in_frame_label(pc(PC), DAPLabel) :-
+    number_string(PC, DAPLabel).
 
 
 da_server_handled_message("request", RequestSeq, Message0, Out, W, State0, State, Seq0, Seq) :-
