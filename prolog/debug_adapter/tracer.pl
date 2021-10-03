@@ -68,6 +68,7 @@ da_trace(Goal, ServerThreadId, ServerInterruptHandle) :-
             ), Ref),
     visible([+unify, +cut_call, +cut_exit, +break]),
     prolog_skip_level(OldSkipLevel, very_deep),
+    asserta(da_tracer_last_action(null)),
     trace,
     catch((  Goal
           -> ExitCode = 0
@@ -77,9 +78,10 @@ da_trace(Goal, ServerThreadId, ServerInterruptHandle) :-
           ExitCode = 2
          ),
     notrace,
+    debug(dap(tracer), "tracer cleanup", []),
     prolog_skip_level(_, OldSkipLevel),
     erase(Ref),
-    debug(dap(tracer), "tracer cleanup", []),
+
     set_prolog_flag(gui_tracer, OldFlag),
     da_debugee_exited(ExitCode, ServerThreadId, ServerInterruptHandle).
 
@@ -92,14 +94,12 @@ da_debugee_exited(R, S, W) :-
 da_trace_interception(Port, Frame, Choice, Action) :-
     debug(dap(tracer), "Intercepting ~w ~w ~w", [Port, Frame, Choice]),
     da_debugee_server(ServerThreadId, ServerInterruptHandle),
-    (   da_tracer_last_action(LastAction)
-    ->  prolog_dap_stopped_reason(Port, LastAction, Reason, Description, Text)
-    ;   Reason = "entry", Description = "Paused on goal entry", Text = null
-    ),
-    da_debugee_emitted_message(stopped(Reason, Description, Text, null), ServerThreadId, ServerInterruptHandle),
-    da_tracer_loop(Port, Frame, Choice, Action, ServerThreadId, ServerInterruptHandle),
+    da_tracer_last_action(LastAction),
     retractall(da_tracer_last_action(_)),
-    asserta(da_tracer_last_action(Action)).
+    debug(dap(tracer), "Last tracer action was ~w", [LastAction]),
+    da_tracer_stopped_reason(Port, LastAction, Reason, Description, Text, BreakpointIds),
+    da_debugee_emitted_message(stopped(Reason, Description, Text, BreakpointIds), ServerThreadId, ServerInterruptHandle),
+    da_tracer_loop(Port, Frame, Choice, Action, ServerThreadId, ServerInterruptHandle).
 
 da_tracer_loop(Port, Frame, Choice, Action, ServerThreadId, ServerInterruptHandle) :-
     thread_get_message(Message),
@@ -108,6 +108,18 @@ da_tracer_loop(Port, Frame, Choice, Action, ServerThreadId, ServerInterruptHandl
     ->  da_tracer_loop(Port, Frame, Choice, Action, ServerThreadId, ServerInterruptHandle)
     ;   Action  = Action0
     ).
+
+
+%!  da_tracer_stopped_reason(+Port, +LastAction, -Reason, -Description, -Text, -BreakpointIds) is det.
+
+:- det(da_tracer_stopped_reason/6).
+da_tracer_stopped_reason(break(_), _, "breakpoint", null, null, null) :- !.
+da_tracer_stopped_reason(exception(Exception), _, "exception", null, Description, null) :-
+    !,
+    term_string(Exception, Description).
+da_tracer_stopped_reason(call, null, "entry", null, null, null) :- !.
+da_tracer_stopped_reason(_, step_in, "step", null, null, null) :- !.
+
 
 :- det(prolog_dap_stopped_reason/5).
 prolog_dap_stopped_reason(Port, _, Reason, null, null) :-
@@ -128,7 +140,15 @@ da_tracer_handled_message(variables(RequestId, VariablesRef), _Port, _Frame, _Ch
     !,
     da_referenced_variables(VariablesRef, Variables),
     da_debugee_emitted_message(variables(RequestId, Variables), S, W).
-da_tracer_handled_message(step_in, _Port, _Frame, _Choice, continue, _S, _W) :- !.
-da_tracer_handled_message(disconnect, _Port, _Frame, _Choice, nodebug, _S, _W) :- !.
-da_tracer_handled_message(continue, _Port, _Frame, _Choice, nodebug, _S, _W) :- !.
-da_tracer_handled_message(restart_frame(FrameId), _Port, _Frame, _Choice, retry(FrameId), _S, _W) :- !.
+da_tracer_handled_message(step_in, _Port, _Frame, _Choice, continue, _S, _W) :-
+    !,
+    asserta(da_tracer_last_action(step_in)).
+da_tracer_handled_message(disconnect, _Port, _Frame, _Choice, nodebug, _S, _W) :-
+    !,
+    asserta(da_tracer_last_action(disconnect)).
+da_tracer_handled_message(continue, _Port, _Frame, _Choice, nodebug, _S, _W) :-
+    !,
+    asserta(da_tracer_last_action(continue)).
+da_tracer_handled_message(restart_frame(FrameId), _Port, _Frame, _Choice, retry(FrameId), _S, _W) :-
+    !,
+    asserta(da_tracer_last_action(restart_frame)).
