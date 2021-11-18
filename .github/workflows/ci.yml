@@ -27,4 +27,3 @@ jobs:
           ./configure
           make
           make check
-          make distcheck

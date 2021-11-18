@@ -25,7 +25,6 @@ jobs:
           ./configure
           make
           make check
-          make distcheck
 
       - name: Build pack
         run: |
