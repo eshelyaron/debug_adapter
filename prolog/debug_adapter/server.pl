@@ -142,6 +142,12 @@ da_server_handled_debugee_message(_DebugeeThreadId,
     dap_response(Out, Seq0, RequestSeq, "stackTrace", _{stackFrames:StackFrames}),
     succ(Seq0, Seq).
 da_server_handled_debugee_message(_DebugeeThreadId,
+                                  exception_info(RequestSeq, ExceptionTerm),
+                                  Out, State, State, Seq0, Seq) :-
+    prolog_dap_exception(ExceptionTerm, ExceptionId),
+    dap_response(Out, Seq0, RequestSeq, "exceptionInfo", _{exceptionId:ExceptionId, description:ExceptionId}),
+    succ(Seq0, Seq).
+da_server_handled_debugee_message(_DebugeeThreadId,
                                   scopes(RequestSeq, Scopes0),
                                   Out, State, State, Seq0, Seq) :-
     maplist(prolog_dap_scope, Scopes0, Scopes),
@@ -222,6 +228,8 @@ prolog_dap_stack_frame(stack_frame(Id, InFrameLabel, PI, _Alternative, SourceSpa
     prolog_dap_source_span(SourceSpan, DAPSource, SL, SC, EL, EC),
     prolog_dap_in_frame_label(InFrameLabel, DAPLabel).
 
+prolog_dap_exception(E, S) :- term_string(E, S).
+
 prolog_dap_in_frame_label(port(Port), DAPLabel) :-
     !,
     functor(Port, PortName, _Arity),
@@ -261,6 +269,13 @@ da_server_command("stackTrace", RequestSeq, Message, Out, _W, State, State, Seq0
     catch((thread_send_message(ThreadId, stack_trace(RequestSeq)), Seq = Seq0),
           _Catcher,
           (dap_error(Out, Seq0, RequestSeq, "stackTrace", null), succ(Seq0, Seq))
+         ).
+da_server_command("exceptionInfo", RequestSeq, Message, Out, _W, State, State, Seq0, Seq) :-
+    _{ arguments:Args } :< Message,
+    _{ threadId:ThreadId } :< Args,
+    catch((thread_send_message(ThreadId, exception_info(RequestSeq)), Seq = Seq0),
+          _Catcher,
+          (dap_error(Out, Seq0, RequestSeq, "exceptionInfo", null), succ(Seq0, Seq))
          ).
 da_server_command("stepIn", RequestSeq, Message, Out, _W, State, State, Seq0, Seq) :-
     _{ arguments:Args } :< Message,
