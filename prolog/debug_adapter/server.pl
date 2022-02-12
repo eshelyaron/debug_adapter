@@ -268,10 +268,16 @@ da_server_command("stepIn", RequestSeq, Message, Out, _W, State, State, Seq0, Se
     dap_response(Out, Seq0, RequestSeq, "stepIn"),
     succ(Seq0, Seq),
     thread_send_message(ThreadId, step_in).
+da_server_command("stepOut", RequestSeq, Message, Out, _W, State, State, Seq0, Seq) :-
+    _{ arguments:Args } :< Message,
+    _{ threadId:ThreadId } :< Args,
+    dap_response(Out, Seq0, RequestSeq, "stepOut"),
+    succ(Seq0, Seq),
+    thread_send_message(ThreadId, step_out).
 da_server_command("next", RequestSeq, Message, Out, _W, State, State, Seq0, Seq) :-
     _{ arguments:Args } :< Message,
     _{ threadId:ThreadId } :< Args,
-    dap_response(Out, Seq0, RequestSeq, "stepIn"),
+    dap_response(Out, Seq0, RequestSeq, "next"),
     succ(Seq0, Seq),
     thread_send_message(ThreadId, next).
 da_server_command("continue", RequestSeq, Message, Out, _W, State, State, Seq0, Seq) :-

@@ -124,8 +124,9 @@ da_tracer_stopped_reason(exception(Exception), _, "exception", null, Description
     !,
     term_string(Exception, Description).
 da_tracer_stopped_reason(call, null, "entry", null, null, null) :- !.
-da_tracer_stopped_reason(_, step_in, "step", null, null, null) :- !.
-da_tracer_stopped_reason(_, next   , "step", null, null, null) :- !.
+da_tracer_stopped_reason(_, step_in, "step in", null, null, null) :- !.
+da_tracer_stopped_reason(_, step_out, "step out", null, null, null) :- !.
+da_tracer_stopped_reason(_, next   , "step over", null, null, null) :- !.
 da_tracer_stopped_reason(_, restart_frame, "restart", null, null, null) :- !.
 
 
@@ -151,6 +152,9 @@ da_tracer_handled_message(variables(RequestId, VariablesRef), _Port, _Frame, _Ch
 da_tracer_handled_message(step_in, _Port, _Frame, _Choice, continue, _S, _W) :-
     !,
     asserta(da_tracer_last_action(step_in)).
+da_tracer_handled_message(step_out, _Port, _Frame, _Choice, up, _S, _W) :-
+    !,
+    asserta(da_tracer_last_action(step_out)).
 da_tracer_handled_message(disconnect, _Port, _Frame, _Choice, nodebug, _S, _W) :-
     !,
     asserta(da_tracer_last_action(disconnect)).
