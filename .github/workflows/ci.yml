@@ -23,4 +23,5 @@ jobs:
 
       - name: Run Tests
         run: |
+          ls -la
           swipl test/server.plt
