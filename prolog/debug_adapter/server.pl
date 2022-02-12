@@ -74,7 +74,9 @@ da_server_handled_stream(In, _R, In, Out, W, State0, State, Seq0, Seq) :-
     dap_read(In, Message0),
     del_dict(seq,  Message0, ClientSeq, Message1),
     del_dict(type, Message1, Type, Message),
-    da_server_handled_message(Type, ClientSeq, Message, Out, W, State0, State, Seq0, Seq).
+    debug(dap(server), "Received message ~w from stdin", [Message]),
+    da_server_handled_message(Type, ClientSeq, Message, Out, W, State0, State, Seq0, Seq),
+    debug(dap(server), "Handled message ~w from stdin", [Message]).
 da_server_handled_stream(_In, R, R, Out, _, State0, State, Seq0, Seq) :-
     get_code(R, _),
     da_server_handled_debugee_messages(Out, State0, State, Seq0, Seq).
@@ -105,6 +107,7 @@ da_server_handled_debugee_messages(Out, State0, State, Seq0, Seq) :-
     ->  thread_get_message(DebugeeThreadId-Message),
         debug(dap(server), "Received message ~w from debugee thread ~w", [Message, DebugeeThreadId]),
         da_server_handled_debugee_message(DebugeeThreadId, Message, Out, State0, State1, Seq0, Seq1),
+        debug(dap(server), "Handled message ~w from debugee thread ~w", [Message, DebugeeThreadId]),
         da_server_handled_debugee_messages(Out, State1, State, Seq1, Seq)
     ;   State = State0,
         Seq   = Seq0
