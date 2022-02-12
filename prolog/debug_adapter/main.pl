@@ -31,7 +31,7 @@ main(Argv) :-
 
     opt_parse(OptsSpec, Argv, Opts, _PosArgs),
 
-    ( option(version(true), Opts) -> version(Version), format("SWI-Prolog Debug Adapter Version ~w~n", [Version])
+    ( option(version(true), Opts) -> pack_info(debug_adapter)
     ; option(help(   true), Opts) -> opt_help(OptsSpec, Help), write(Help)
     ; set_prolog_flag(toplevel_prompt, ''),
       (   option(debug(  true), Opts)

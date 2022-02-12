@@ -8,23 +8,9 @@ This repository hosts the development of [DAP](https://microsoft.github.io/debug
 ?- pack_install(debug_adapter).
 ```
 
-To verify the installation, run `swipl_debug_adapter -h`.
+To verify the installation, run `swipl -g "[library(debug_adapter/main)]" -t halt -- -h`.
 
-Alternatively, clone and build the server:
-```sh
-$ git clone https://github.com/eshelyaron/debug_adapter.git
-$ cd debug_adapter
-$ ./configure
-$ make
-```
-
-`make` will build the Debug Adapter server at `prolog/swi_debug_adapter`. Optionally, run the test-suite and install the server to make it accessible from your $PATH:
-```sh
-$ make check
-$ make install
-```
-
-If you're using GNU Emacs, load `elisp/dap-swi-prolog.el` and add the following lines to your `init.el`:
+If you're using GNU Emacs with `dap-mode`, add the following lines to your `init.el`:
 ```elisp
 (require 'dap-swi-prolog)
 ```
