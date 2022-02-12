@@ -25,7 +25,7 @@ jobs:
 
       - name: Build pack
         run: |
-          zip -r debug_adapter-`swipl -s pack.pl -g "version(V), writeln(V)" -t halt`.zip pack.pl prolog
+          zip -r debug_adapter-`swipl -s pack.pl -g "version(V), writeln(V)" -t halt`.zip pack.pl prolog README.md stepIn.gif
 
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
