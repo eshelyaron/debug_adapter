@@ -230,6 +230,10 @@ da_frame_clause_source_span(FrameId, SourceSpan) :-
 da_frame_parent_port_source_span(FrameId, null, _ParentPC, Port, SourceSpan) :-
     !,
     da_frame_port_clause_source_span(FrameId, Port, SourceSpan).
+da_frame_parent_port_source_span(FrameId, _ParentFrameId, _ParentPC, unify, SourceSpan) :-
+    !,
+    da_frame_clause(FrameId, ClauseRef),
+    da_clause_source_span(ClauseRef, SourceSpan, [port(unify)]).
 da_frame_parent_port_source_span(_FrameId, ParentFrameId, ParentPC, Port, SourceSpan) :-
     da_frame_clause(ParentFrameId, ParentClauseRef),
     da_clause_source_span(ParentClauseRef, SourceSpan, [pc(ParentPC), port(Port)]).
