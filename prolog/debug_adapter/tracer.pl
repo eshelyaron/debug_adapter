@@ -125,6 +125,8 @@ da_tracer_stopped_reason(exception(Exception), _, "exception", null, Description
     term_string(Exception, Description).
 da_tracer_stopped_reason(call, null, "entry", null, null, null) :- !.
 da_tracer_stopped_reason(_, step_in, "step", null, null, null) :- !.
+da_tracer_stopped_reason(_, next   , "step", null, null, null) :- !.
+da_tracer_stopped_reason(_, restart_frame, "restart", null, null, null) :- !.
 
 
 :- det(prolog_dap_stopped_reason/5).
@@ -158,3 +160,6 @@ da_tracer_handled_message(continue, _Port, _Frame, _Choice, nodebug, _S, _W) :-
 da_tracer_handled_message(restart_frame(FrameId), _Port, _Frame, _Choice, retry(FrameId), _S, _W) :-
     !,
     asserta(da_tracer_last_action(restart_frame)).
+da_tracer_handled_message(next, _Port, _Frame, _Choice, skip, _S, _W) :-
+    !,
+    asserta(da_tracer_last_action(next)).
