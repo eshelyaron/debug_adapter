@@ -198,8 +198,18 @@ da_frame_pc_source_span(FrameId, PC, SourceSpan) :-
 
 :- det(da_frame_port_source_span/3).
 da_frame_port_source_span(FrameId, Port, SourceSpan) :-
+    da_port_parent_pc(Port, PC),
+    !,
+    da_frame_parent_port_source_span(FrameId, FrameId, PC, Port, SourceSpan).
+da_frame_port_source_span(FrameId, Port, SourceSpan) :-
     da_frame_parent_pc(FrameId, ParentPC),
     da_frame_parent_pc_source_span(FrameId, ParentPC, Port, SourceSpan).
+
+da_port_parent_pc(cut_call(PC), PC) :- !.
+da_port_parent_pc(cut_exit(PC), PC) :- !.
+da_port_parent_pc(break(PC)   , PC) :- !.
+da_port_parent_pc(redo(0)     , _ ) :- !, false.
+da_port_parent_pc(redo(PC)    , PC) :- !.
 
 da_frame_parent_pc_source_span(FrameId, null, Port, SourceSpan) :-
     !,
