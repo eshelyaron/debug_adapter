@@ -9,6 +9,8 @@
 :- dynamic bar/1.
 
 bar(Bar, Baz) :-
-    (   bar(Bar)
+    (   bar(Bar), bar
     ;   bar(Baz)
     ).
+
+bar.
