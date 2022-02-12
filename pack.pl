@@ -1,8 +1,8 @@
-name(@PACKAGE_NAME@).
+name(debug_adapter).
 title('Debug Adapter Protocol package for SWI-Prolog').
-version('@PACKAGE_VERSION@').
+version('0.2.8').
 author('Eshel Yaron', 'eshelshay.yaron@gmail.com').
 maintainer('Eshel Yaron', 'eshelshay.yaron@gmail.com').
 packager('Eshel Yaron', 'eshelshay.yaron@gmail.com').
 home('https://github.com/eshelyaron/debug_adapter').
-download('https://github.com/eshelyaron/debug_adapter/releases/download/v@PACKAGE_VERSION@/debug_adapter-@PACKAGE_VERSION@.zip').
+download('https://github.com/eshelyaron/debug_adapter/releases/download/v0.2.8/debug_adapter-0.2.8.zip').

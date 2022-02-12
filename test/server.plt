@@ -15,8 +15,8 @@ dapipe(ServerIn, ServerOut, ClientIn, ClientOut) :-
 
 :- begin_tests(server).
 
-:- use_module("@srcdir@/../prolog/debug_adapter/client.pl").
-:- use_module("@srcdir@/../prolog/debug_adapter/server.pl").
+:- use_module("../prolog/debug_adapter/client.pl").
+:- use_module("../prolog/debug_adapter/server.pl").
 
 test(disconnect, [ setup(dapipe(ServerIn, ServerOut, ClientIn, ClientOut)),
                    cleanup(( close(ServerIn),
@@ -73,7 +73,7 @@ test(launch, [ setup(dapipe(SIn, SOut, CIn, COut)),
     source_file(user:da_server_test_marker_predicate, ThisFile),
     file_directory_name(ThisFile, CWD),
     dap_request_response(CIn, COut, 2, "launch", _{ cwd    : CWD,
-                                                    module : "@srcdir@/target/foo.pl",
+                                                    module : "./target/foo.pl",
                                                     goal   : foo
                                                   }, [event(_, "initialized", _)|_],
                          _Body),
@@ -100,7 +100,7 @@ test(configurationDone, [ setup(dapipe(SIn, SOut, CIn, COut)),
     file_directory_name(ThisFile, CWD),
     debug(dap(test), "CWD: ~w", [CWD]),
     dap_request_response(CIn, COut, 2, "launch", _{ cwd    : CWD,
-                                                    module : "@srcdir@/target/foo.pl",
+                                                    module : "./target/foo.pl",
                                                     goal   : foo
                                                   }, [event(_, "initialized", _)|_],
                          _Body),

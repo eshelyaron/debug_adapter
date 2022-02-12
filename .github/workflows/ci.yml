@@ -23,7 +23,6 @@ jobs:
 
       - name: Run Tests
         run: |
-          autoreconf --install
-          ./configure
-          make
-          make check
+          cd test
+          ls -la
+          swipl server.plt
