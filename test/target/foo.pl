@@ -16,7 +16,7 @@ foo :-
 foo(bar) :-
     foo(1, 2, 3, 4, 5),
     !,
-    foo(bar, baz).
+    foo(baz, bar).
 
 foo(baz) :-
     foo(baz, bar).

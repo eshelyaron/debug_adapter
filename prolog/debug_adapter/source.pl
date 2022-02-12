@@ -70,16 +70,21 @@ da_source_layout_port_span(File, Layout, _Port, SourceSpan, _Options) :-
 
 
 entry_port(call) :- !.
+entry_port(cut_call(_)) :- !.
 entry_port(redo(0)) :- !.
 
 exit_port(fail) :- !.
 exit_port(exit) :- !.
+exit_port(cut_exit(_)) :- !.
 exit_port(exception(_)) :- !.
 
 
 %!  da_source_layout_functor_span(+File, +Layout, -SourceSpan) is det.
 
 :- det(da_source_layout_functor_span/3).
+da_source_layout_functor_span(File, SO-EO, span(File, SL, SC, EL, EC)) :-
+    !,
+    da_source_file_offsets_line_column_pairs(File, [SO, EO], [SL-SC, EL-EC]).
 da_source_layout_functor_span(File, term_position(_, _, SO, EO, _), span(File, SL, SC, EL, EC)) :-
     da_source_file_offsets_line_column_pairs(File, [SO, EO], [SL-SC, EL-EC]).
 
