@@ -69,21 +69,21 @@ da_trace(Goal, ServerThreadId, ServerInterruptHandle) :-
     visible([+unify, +cut_call, +cut_exit, +break]),
     prolog_skip_level(OldSkipLevel, very_deep),
     asserta(da_tracer_last_action(null)),
-    trace,
-    catch((  Goal
-          -> ExitCode = 0
-          ;  ExitCode = 1
-          ),
-          _Catcher,
-          ExitCode = 2
-         ),
-    notrace,
+    da_tracer_top_level(Goal, ExitCode),
     debug(dap(tracer), "tracer cleanup", []),
     prolog_skip_level(_, OldSkipLevel),
     erase(Ref),
-
     set_prolog_flag(gui_tracer, OldFlag),
     da_debugee_exited(ExitCode, ServerThreadId, ServerInterruptHandle).
+
+da_tracer_top_level(Goal, ExitCode) :-
+    catch((   trace, Goal, notrace
+          ->  ExitCode = 0
+          ;   notrace, ExitCode = 1
+          ),
+          _Catcher,
+          (notrace, ExitCode = 2)
+         ).
 
 :- det(da_debugee_exited/3).
 da_debugee_exited(R, S, W) :-

@@ -21,14 +21,11 @@ jobs:
 
       - name: Run Tests
         run: |
-          autoreconf --install
-          ./configure
-          make
-          make check
+          swipl test/server.plt
 
       - name: Build pack
         run: |
-          make dist
+          zip -r debug_adapter-`swipl -s pack.pl -g "version(V), writeln(V)" -t halt`.zip pack.pl prolog
 
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
