@@ -23,5 +23,6 @@ jobs:
 
       - name: Run Tests
         run: |
+          cd test
           ls -la
-          swipl test/server.plt
+          swipl server.plt
