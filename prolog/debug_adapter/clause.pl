@@ -101,7 +101,7 @@ da_clause_source_term(ClauseRef, Module, DecompiledClause, VariablesOffset, Sour
                                                     ]),
                        close(Stream)),
     prolog_clause:unify_clause(SourceClause, DecompiledClause, Module, SourceLayout0, SourceLayout),
-    prolog_clause:make_varnames(SourceClause, DecompiledClause, VariablesOffset, VarNames0, VarNames).
+    prolog_clause:make_varnames(SourceClause, DecompiledClause, VariablesOffset, VarNames0, VarNames), !.
 da_clause_source_term(_ClauseRef, Module, DecompiledClause, VariablesOffset, SourceClause, null, SourceLayout, VarNames) :-
     setup_call_cleanup(new_memory_file(MemFile),
                        ( setup_call_cleanup(open_memory_file(MemFile, write, MemOut),
@@ -116,7 +116,7 @@ da_clause_source_term(_ClauseRef, Module, DecompiledClause, VariablesOffset, Sou
                                            close(MemIn))),
                        free_memory_file(MemFile)),
     prolog_clause:unify_clause(SourceClause, DecompiledClause, Module, SourceLayout0, SourceLayout),
-    prolog_clause:make_varnames(SourceClause, DecompiledClause, VariablesOffset, VarNames0, VarNames).
+    prolog_clause:make_varnames(SourceClause, DecompiledClause, VariablesOffset, VarNames0, VarNames), !.
 
 %!  da_clause_decompiled(+ClauseRef, +Module, +DecompiledClause) is det.
 

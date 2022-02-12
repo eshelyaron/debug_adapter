@@ -39,10 +39,16 @@ prolog:open_source_hook(Path, Stream, _Options) :-
 da_debugee(ModulePath, Goal, ServerThreadId, ServerInterruptHandle) :-
     asserta(da_debugee_server(ServerThreadId, ServerInterruptHandle)),
     thread_get_message(_), % wait for a trigger from the server
+    debug(dap(tracer), "starting debugee thread with source file ~w and goal ~w", [ModulePath, Goal]),
     absolute_file_name(ModulePath, AbsModulePath, []),
-    use_module(AbsModulePath),
-    module_property(Module, file(AbsModulePath)),
-    qualified(QGoal, Module, Goal),
+    debug(dap(tracer), "Absolute path to source file ~w", [AbsModulePath]),
+    load_files(AbsModulePath),
+    debug(dap(tracer), "Loaded source file ~w", [AbsModulePath]),
+    (   module_property(Module, file(AbsModulePath))
+    ->  qualified(QGoal, Module, Goal)
+    ;   QGoal = Goal
+    ),
+    debug(dap(tracer), "debugee qualified goal ~w", [QGoal]),
     da_trace(QGoal, ServerThreadId, ServerInterruptHandle).
 
 da_debugee_emitted_message(Message, ServerThreadId, ServerInterruptHandle) :-
