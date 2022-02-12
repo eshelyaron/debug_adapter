@@ -120,7 +120,7 @@ da_tracer_loop(Port, Frame, Choice, Action, ServerThreadId, ServerInterruptHandl
 
 :- det(da_tracer_stopped_reason/6).
 da_tracer_stopped_reason(break(_), _, "breakpoint", null, null, null) :- !.
-da_tracer_stopped_reason(exception(Exception), _, "exception", null, Description, null) :-
+da_tracer_stopped_reason(exception(Exception), _, "exception", Description, null, null) :-
     !,
     term_string(Exception, Description).
 da_tracer_stopped_reason(call, null, "entry", null, null, null) :- !.
@@ -149,6 +149,9 @@ da_tracer_handled_message(variables(RequestId, VariablesRef), _Port, _Frame, _Ch
     !,
     da_referenced_variables(VariablesRef, Variables),
     da_debugee_emitted_message(variables(RequestId, Variables), S, W).
+da_tracer_handled_message(exception_info(RequestId), exception(Exception), _Frame, _Choice, loop, S, W) :-
+    !,
+    da_debugee_emitted_message(exception_info(RequestId, Exception), S, W).
 da_tracer_handled_message(step_in, _Port, _Frame, _Choice, continue, _S, _W) :-
     !,
     asserta(da_tracer_last_action(step_in)).
