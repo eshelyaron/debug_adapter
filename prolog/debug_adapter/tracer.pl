@@ -70,7 +70,8 @@ da_trace(Goal, ServerThreadId, ServerInterruptHandle) :-
     ),
     set_prolog_flag(gui_tracer, true),
     asserta((user:prolog_trace_interception(Port, Frame, Choice, Action) :-
-                 notrace(da_trace_interception(Port, Frame, Choice, Action))
+                 notrace(da_trace_interception(Port, Frame, Choice, Action)),
+                 da_tracer_yield(Action)
             ), Ref),
     visible([+unify, +cut_call, +cut_exit, +break]),
     prolog_skip_level(OldSkipLevel, very_deep),
@@ -170,3 +171,31 @@ da_tracer_handled_message(restart_frame(FrameId), _Port, _Frame, _Choice, retry(
 da_tracer_handled_message(next, _Port, _Frame, _Choice, skip, _S, _W) :-
     !,
     asserta(da_tracer_last_action(next)).
+
+%! da_tracer_yield(TracerAction) is det.
+%
+%  Called right before returning TracerAction to the Prolog tracer to
+%  adjust its subsequent behaviour.
+
+:- det(da_tracer_yield/1).
+da_tracer_yield(skip) :-
+    trace.
+da_tracer_yield(retry) :-
+    prolog_skip_level(_, very_deep),
+    trace.
+da_tracer_yield(retry(_)) :-
+    prolog_skip_level(_, very_deep),
+    trace.
+da_tracer_yield(fail) :-
+    prolog_skip_level(_, very_deep),
+    trace.
+da_tracer_yield(continue) :-
+    prolog_skip_level(_, very_deep),
+    trace.
+da_tracer_yield(up) :-
+    prolog_skip_level(_, very_deep),
+    trace.
+da_tracer_yield(nodebug).
+da_tracer_yield(abort).
+da_tracer_yield(ignore) :-
+    trace.

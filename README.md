@@ -29,7 +29,7 @@ Some of the needed steps towards these goals are:
 
 - [x] Stepping through the source code of a debugee with precise source positions
 - [x] Restarting debuged frames
-- [ ] Supporting more debug requests - `stepOut`, `stepBack`, `next`
+- [x] Supporting more debug requests - `stepOut`, `stepBack`, `next`
 - [x] Providing source code for dynamic predicates through decompilation
 - [ ] Installing breakpoints at source positions
 - [x] Providing information about variable bindings in each frame

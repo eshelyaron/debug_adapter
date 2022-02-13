@@ -8,9 +8,13 @@
 
 :- dynamic bar/1.
 
+bar(baz).
+
 bar(Bar, Baz) :-
     (   bar(Bar), bar
     ;   bar(Baz)
     ).
 
-bar.
+bar :- phrase(bar(foo), `spam`).
+
+bar(foo) --> `spam`.
