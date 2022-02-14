@@ -5,6 +5,7 @@
        ]
    ).
 
+
 :- predicate_options(da_server/1, 1, [ in(+stream),
                                        out(+stream)
                                      ]
@@ -22,6 +23,7 @@ specification](https://microsoft.github.io/debug-adapter-protocol/specification)
 :- use_module(tracer).
 :- use_module(protocol).
 :- use_module(source).
+:- use_module(clause).
 :- use_module(breakpoint).
 
 %!  da_server(+Options) is det.
@@ -209,7 +211,7 @@ prolog_dap_variable(variable(Name, Value, VariablesRef),
                      }
                    ) :- !.
 
-prolog_dap_source_span(span(File, SL, SC, EL, EC),
+prolog_dap_source_span(span(path(File), SL, SC, EL, EC),
                        _{ name            : Name,
                           path            : File,
                           origin          : "Static"
@@ -218,12 +220,12 @@ prolog_dap_source_span(span(File, SL, SC, EL, EC),
                       ) :-
     !,
     file_base_name(File, Name).
-prolog_dap_source_span(reference(SourceReference),
+prolog_dap_source_span(span(reference(SourceReference), SL, SC, EL, EC),
                        _{ name            : "*dynamic*",
                           sourceReference : SourceReference,
                           origin          : "Dynamic"
                         },
-                       0, 0, null, null
+                       SL, SC, EL, EC
                       ).
 
 prolog_dap_stack_frame(stack_frame(Id, InFrameLabel, PI, _Alternative, SourceSpan),
@@ -345,12 +347,26 @@ da_server_command("setBreakpoints", RequestSeq, Message, Out, _W, State, State, 
     maplist(prolog_dap_breakpoint, ResBreakpoints, DAPBreakpoints),
     dap_response(Out, Seq0, RequestSeq, "setBreakpoints", _{breakpoints:DAPBreakpoints}),
     succ(Seq0, Seq).
+da_server_command("source", RequestSeq, Message, Out, _W, State, State, Seq0, Seq) :-
+    _{ arguments : Args } :< Message,
+    _{ sourceReference : SourceReference
+     } :< Args,
+    (   integer(SourceReference), SourceReference > 0
+    ->  da_source_clause_cached_reference(ClauseRef, SourceReference),
+        da_clause_decompiled(ClauseRef, Module, DecompiledClause, VariablesOffset),
+        da_clause_source_term(ClauseRef, Module, DecompiledClause, VariablesOffset, SourceClause, _, _),
+        with_output_to(string(Content), portray_clause(current_output, SourceClause, [module(Module)])),
+        dap_response(Out, Seq0, RequestSeq, "source", _{content:Content})
+    ;   dap_response(Out, Seq0, RequestSeq, "source", _{               })
+    ),
+    succ(Seq0, Seq).
 da_server_command(Command, RequestSeq, _Message, Out, _W, State, State, Seq0, Seq) :-
     format(string(ErrorMessage), "Command \"~w\" is not implemented", [Command]),
     dap_error(Out, Seq0, RequestSeq, Command, ErrorMessage),
     succ(Seq0, Seq).
 
-dap_source_path(D, P) :- _{ path : P0 } :< D, atom_string(P, P0).
+dap_source_path(D, path(P)) :- _{ path : P0 } :< D, !, atom_string(P, P0).
+dap_source_path(D, reference(R)) :- _{ sourceReference : R } :< D.
 
 dap_prolog_source_breakpoint(P, D, source_breakpoint(L, C)) :-
     _{ line   : L,

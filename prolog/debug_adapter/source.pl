@@ -3,6 +3,10 @@
        [
            da_source_subterm_span/5,
            da_source_layout_span/4,
+           da_source_clause_cached_reference/2,
+           da_source_clause_reference/3,
+           da_clause_decompiled/4,
+           qualified/3,
            da_source_file_offsets_line_column_pairs/3
        ]
    ).
@@ -93,13 +97,29 @@ da_source_layout_functor_span(File, term_position(_, _, SO, EO, _), span(File, S
 %!  da_source_file_offsets_line_column_pairs(+File, +Offsets, -LineColumnPairs) is det.
 
 :- det(da_source_file_offsets_line_column_pairs/3).
-da_source_file_offsets_line_column_pairs(File, Offsets, Pairs) :-
+da_source_file_offsets_line_column_pairs(path(File), Offsets, Pairs) :-
+    !,
     setup_call_cleanup(
         ( prolog_clause:try_open_source(File, Stream),
           set_stream(Stream, newline(detect))
         ),
         da_source_stream_offsets_line_column_pairs(Stream, Offsets, Pairs),
         close(Stream)).
+da_source_file_offsets_line_column_pairs(reference(0), Offsets, Pairs) :- !, findall(0-0, member(_, Offsets), Pairs).
+da_source_file_offsets_line_column_pairs(reference(SourceReference), Offsets, Pairs) :-
+    debug(dap(tracer), "here", []),
+    da_source_clause_cached_reference(ClauseRef, SourceReference),
+    debug(dap(tracer), "there", []),
+    da_clause_decompiled(ClauseRef, Module, DecompiledClause, _),
+    debug(dap(tracer), "everywhere", []),
+    setup_call_cleanup(new_memory_file(MemFile),
+                       ( setup_call_cleanup(open_memory_file(MemFile, write, MemOut),
+                                            portray_clause(MemOut, DecompiledClause, [module(Module)]),
+                                            close(MemOut)),
+                         setup_call_cleanup(open_memory_file(MemFile, read, MemIn),
+                                            da_source_stream_offsets_line_column_pairs(MemIn, Offsets, Pairs),
+                                            close(MemIn))),
+                       free_memory_file(MemFile)).
 
 
 %!  da_source_stream_offsets_line_column_pairs(+Stream, +Offsets, -LineColumnPairs) is det.
@@ -131,3 +151,43 @@ da_source_stream_offset_line_column(Stream, Offset, Line, Column) :-
     ;   get_code(Stream, _),
         da_source_stream_offset_line_column(Stream, Offset, Line, Column)
     ).
+
+
+%!  da_source_clause_reference(+ClauseRef, -SourceReference, +Options) is det.
+
+:- det(da_source_clause_reference/3).
+da_source_clause_reference(ClauseRef, SourceReference, _Options) :-
+    (   da_source_clause_cached_reference(ClauseRef, LastReference)
+    ->  succ(LastReference, SourceReference)
+    ;   random_between(0, 16777216, SourceReference)
+    ),
+    asserta(da_source_clause_cached_reference(ClauseRef, SourceReference)).
+
+
+%!  da_source_clause_cached_reference(+ClauseRef, +SourceReference) is semidet.
+
+:- dynamic da_source_clause_cached_reference/2.
+
+
+%!  da_clause_decompiled(+ClauseRef, -Module, -DecompiledClause, -VariablesOffset) is det.
+
+:- det(da_clause_decompiled/4).
+da_clause_decompiled(ClauseRef, Module, DecompiledClause, VariablesOffset) :-
+    '$clause'(Head0, Body, ClauseRef, VariablesOffset),
+    qualified(Head0, Module, Head),
+    (   Body == true
+    ->  DecompiledClause = Head
+    ;   DecompiledClause = (Head :- Body)
+    ).
+
+
+qualified(Module:UnqualifiedGoal, Module, UnqualifiedGoal) :-
+    !.
+qualified('<meta-call>'(_Module0:Goal), Module, UnqualifiedGoal) :-
+    qualified(Goal, Module, UnqualifiedGoal),
+    !.
+qualified('<meta-call>'(Goal), Module, UnqualifiedGoal) :-
+    qualified(Goal, Module, UnqualifiedGoal),
+    !.
+
+qualified(UnqualifiedGoal, user, UnqualifiedGoal).
