@@ -21,6 +21,8 @@ specification](https://microsoft.github.io/debug-adapter-protocol/specification)
 
 :- use_module(tracer).
 :- use_module(protocol).
+:- use_module(source).
+:- use_module(breakpoint).
 
 %!  da_server(+Options) is det.
 %
@@ -187,6 +189,19 @@ prolog_dap_scope(scope(Name, VariablesRef, SourceSpan),
                 ) :-
     prolog_dap_source_span(SourceSpan, DAPSource, SL, SC, EL, EC).
 
+prolog_dap_breakpoint(breakpoint(Id, Verified, Message, SourceSpan),
+                 _{ id                 : Id,
+                    verified           : Verified,
+                    message            : Message,
+                    source             : DAPSource,
+                    line               : SL,
+                    column             : SC,
+                    endLine            : EL,
+                    endColumn          : EC
+                  }
+                ) :-
+    prolog_dap_source_span(SourceSpan, DAPSource, SL, SC, EL, EC).
+
 prolog_dap_variable(variable(Name, Value, VariablesRef),
                     _{ name               : Name,
                        variablesReference : VariablesRef,
@@ -319,10 +334,32 @@ da_server_command("variables", RequestSeq, Message, _Out, _W, State, State, Seq,
     _{ arguments:Args } :< Message,
     _{ variablesReference:VariablesRef } :< Args,
     maplist({RequestSeq, VariablesRef}/[debugee(PrologThreadId, _, _)]>>thread_send_message(PrologThreadId, variables(RequestSeq, VariablesRef)), State).
+da_server_command("setBreakpoints", RequestSeq, Message, Out, _W, State, State, Seq0, Seq) :-
+    _{ arguments : Args } :< Message,
+    _{ source      : DAPSource,
+       breakpoints : DAPReqBreakpoints
+     } :< Args,
+    dap_source_path(DAPSource, Path),
+    maplist(dap_prolog_source_breakpoint(Path), DAPReqBreakpoints, ReqBreakpoints),
+    da_breakpoints_set(Path, ReqBreakpoints, ResBreakpoints),
+    maplist(prolog_dap_breakpoint, ResBreakpoints, DAPBreakpoints),
+    dap_response(Out, Seq0, RequestSeq, "setBreakpoints", _{breakpoints:DAPBreakpoints}),
+    succ(Seq0, Seq).
 da_server_command(Command, RequestSeq, _Message, Out, _W, State, State, Seq0, Seq) :-
     format(string(ErrorMessage), "Command \"~w\" is not implemented", [Command]),
     dap_error(Out, Seq0, RequestSeq, Command, ErrorMessage),
     succ(Seq0, Seq).
+
+dap_source_path(D, P) :- _{ path : P0 } :< D, atom_string(P, P0).
+
+dap_prolog_source_breakpoint(P, D, source_breakpoint(L, C)) :-
+    _{ line   : L,
+       column : C0
+     } :< D, !,
+    da_source_file_offsets_line_column_pairs(P, [C], [L-C0]).
+dap_prolog_source_breakpoint(P, D, source_breakpoint(L, C)) :-
+    _{ line   : L } :< D,
+    da_source_file_offsets_line_column_pairs(P, [C], [L-5]).  % 5 is a "guess" of the indentation. TODO - locate first term in line intelligently
 
 
 da_server_disconnect_debugee(debugee(BlobThreadId, _EphermalThreadId, _Goal)) :-
@@ -338,7 +375,11 @@ prolog_dap_thread(debugee(PrologThreadId, ThreadId, _),
     ),
     term_string(Name0, Name).
 
-da_server_capabilities(_{supportsConfigurationDoneRequest: true}).
+da_server_capabilities(_{ supportsConfigurationDoneRequest : true,
+                          supportsExceptionInfoRequest     : true,
+                          supportsRestartFrame             : true
+                        }
+                      ).
 
 da_initialized(_).
 
