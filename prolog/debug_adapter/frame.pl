@@ -18,7 +18,9 @@
        ]
    ).
 
+:- use_module(source).
 :- use_module(clause).
+
 
 /** <module> DAP library module for reasoning about Prolog frames
 
@@ -207,7 +209,6 @@ da_frame_port_source_span(FrameId, Port, SourceSpan) :-
 
 da_port_parent_pc(cut_call(PC), PC) :- !.
 da_port_parent_pc(cut_exit(PC), PC) :- !.
-da_port_parent_pc(break(PC)   , PC) :- !.
 da_port_parent_pc(redo(0)     , _ ) :- !, false.
 da_port_parent_pc(redo(PC)    , PC) :- !.
 

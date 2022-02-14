@@ -14,7 +14,7 @@ tracer which is attached to each DAP debugged thread.
 
 :- use_module(stack).
 :- use_module(frame).
-:- use_module(clause, [qualified/3]).
+:- use_module(source, [qualified/3]).
 
 :- thread_local da_debugee_server/2.
 :- thread_local da_tracer_last_action/1.
@@ -120,7 +120,6 @@ da_tracer_loop(Port, Frame, Choice, Action, ServerThreadId, ServerInterruptHandl
 %!  da_tracer_stopped_reason(+Port, +LastAction, -Reason, -Description, -Text, -BreakpointIds) is det.
 
 :- det(da_tracer_stopped_reason/6).
-da_tracer_stopped_reason(break(_), _, "breakpoint", null, null, null) :- !.
 da_tracer_stopped_reason(exception(Exception), _, "exception", Description, null, null) :-
     !,
     term_string(Exception, Description).
