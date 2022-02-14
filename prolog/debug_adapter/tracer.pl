@@ -42,7 +42,7 @@ da_debugee(ModulePath, Goal, ServerThreadId, ServerInterruptHandle) :-
     debug(dap(tracer), "starting debugee thread with source file ~w and goal ~w", [ModulePath, Goal]),
     absolute_file_name(ModulePath, AbsModulePath, []),
     debug(dap(tracer), "Absolute path to source file ~w", [AbsModulePath]),
-    load_files(AbsModulePath),
+    ensure_loaded(AbsModulePath),
     debug(dap(tracer), "Loaded source file ~w", [AbsModulePath]),
     (   module_property(Module, file(AbsModulePath))
     ->  qualified(QGoal, Module, Goal)
@@ -129,6 +129,7 @@ da_tracer_stopped_reason(_, step_in, "step in", null, null, null) :- !.
 da_tracer_stopped_reason(_, step_out, "step out", null, null, null) :- !.
 da_tracer_stopped_reason(_, next   , "step over", null, null, null) :- !.
 da_tracer_stopped_reason(_, restart_frame, "restart", null, null, null) :- !.
+da_tracer_stopped_reason(_, continue, "breakpoint", null, null, null) :- !.
 
 
 :- det(prolog_dap_stopped_reason/5).
@@ -162,7 +163,7 @@ da_tracer_handled_message(step_out, _Port, _Frame, _Choice, up, _S, _W) :-
 da_tracer_handled_message(disconnect, _Port, _Frame, _Choice, nodebug, _S, _W) :-
     !,
     asserta(da_tracer_last_action(disconnect)).
-da_tracer_handled_message(continue, _Port, _Frame, _Choice, nodebug, _S, _W) :-
+da_tracer_handled_message(continue, _Port, _Frame, _Choice, continue, _S, _W) :-
     !,
     asserta(da_tracer_last_action(continue)).
 da_tracer_handled_message(restart_frame(FrameId), _Port, _Frame, _Choice, retry(FrameId), _S, _W) :-
@@ -189,6 +190,12 @@ da_tracer_yield(retry(_)) :-
 da_tracer_yield(fail) :-
     prolog_skip_level(_, very_deep),
     trace.
+da_tracer_yield(continue) :-
+    da_tracer_last_action(continue),
+    !,
+    notrace,
+    prolog_skip_level(_, very_deep),
+    debug.
 da_tracer_yield(continue) :-
     prolog_skip_level(_, very_deep),
     trace.

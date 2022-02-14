@@ -2,7 +2,8 @@
        da_source,
        [
            da_source_subterm_span/5,
-           da_source_layout_span/4
+           da_source_layout_span/4,
+           da_source_file_offsets_line_column_pairs/3
        ]
    ).
 
@@ -91,6 +92,7 @@ da_source_layout_functor_span(File, term_position(_, _, SO, EO, _), span(File, S
 
 %!  da_source_file_offsets_line_column_pairs(+File, +Offsets, -LineColumnPairs) is det.
 
+:- det(da_source_file_offsets_line_column_pairs/3).
 da_source_file_offsets_line_column_pairs(File, Offsets, Pairs) :-
     setup_call_cleanup(
         ( prolog_clause:try_open_source(File, Stream),
@@ -109,7 +111,18 @@ da_source_stream_offsets_line_column_pairs(Stream, [H0|T0], [Line-Column|T]) :-
 
 
 %!  da_source_stream_offset_line_column(+File, +Offset, -Line, -Column) is det.
+%!  da_source_stream_offset_line_column(+File, -Offset, +Line, +Column) is det.
 
+da_source_stream_offset_line_column(Stream, Offset, Line, Column) :-
+    var(Offset),
+    !,
+    line_count(Stream, CurrentLine),
+    (   CurrentLine == Line
+    ->  character_count(Stream, CurrentOffset),
+        Offset is CurrentOffset + Column
+    ;   skip_line(Stream),
+        da_source_stream_offset_line_column(Stream, Offset, Line, Column)
+    ).
 da_source_stream_offset_line_column(Stream, Offset, Line, Column) :-
     character_count(Stream, CurrentOffset),
     (   CurrentOffset == Offset
