@@ -107,11 +107,8 @@ da_source_file_offsets_line_column_pairs(path(File), Offsets, Pairs) :-
         close(Stream)).
 da_source_file_offsets_line_column_pairs(reference(0), Offsets, Pairs) :- !, findall(0-0, member(_, Offsets), Pairs).
 da_source_file_offsets_line_column_pairs(reference(SourceReference), Offsets, Pairs) :-
-    debug(dap(tracer), "here", []),
-    da_source_clause_cached_reference(ClauseRef, SourceReference),
-    debug(dap(tracer), "there", []),
+    da_source_clause_cached_reference(ClauseRef, SourceReference),  % TODO - cache newline positions for cached clauses
     da_clause_decompiled(ClauseRef, Module, DecompiledClause, _),
-    debug(dap(tracer), "everywhere", []),
     setup_call_cleanup(new_memory_file(MemFile),
                        ( setup_call_cleanup(open_memory_file(MemFile, write, MemOut),
                                             portray_clause(MemOut, DecompiledClause, [module(Module)]),
