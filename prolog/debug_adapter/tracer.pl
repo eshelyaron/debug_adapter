@@ -42,7 +42,7 @@ da_debugee(ModulePath, Goal, ServerThreadId, ServerInterruptHandle) :-
     debug(dap(tracer), "starting debugee thread with source file ~w and goal ~w", [ModulePath, Goal]),
     absolute_file_name(ModulePath, AbsModulePath, []),
     debug(dap(tracer), "Absolute path to source file ~w", [AbsModulePath]),
-    ensure_loaded(AbsModulePath),
+    user:ensure_loaded(AbsModulePath),
     debug(dap(tracer), "Loaded source file ~w", [AbsModulePath]),
     (   module_property(Module, file(AbsModulePath))
     ->  qualified(QGoal, Module, Goal)

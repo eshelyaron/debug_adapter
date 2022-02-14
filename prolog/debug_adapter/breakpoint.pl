@@ -10,7 +10,7 @@
 
 :- det(da_breakpoints_set/3).
 da_breakpoints_set(Path, Req, Res) :-
-    load_files(Path, [if(not_loaded)]),
+    user:ensure_loaded(Path),
     findall(BP, prolog_breakpoints:breakpoint_property(BP, file(Path)), BPs),
     maplist(prolog_breakpoints:delete_breakpoint, BPs),
     phrase(da_breakpoints_set(Req, Path), Res).
