@@ -107,6 +107,8 @@ da_frame_parent_non_hidden_parent(ParentFrameId, ParentFrameId).
 :- det(da_frame_parent_pc/2).
 da_frame_parent_pc(Frame, PC) :-
     prolog_frame_attribute(Frame, pc, PC),
+    da_frame_parent(Frame, Parent),
+    \+ da_hidden_frame(Parent),
     !.
 da_frame_parent_pc(_, null).
 
@@ -122,7 +124,7 @@ da_hidden_frame(Frame) :-
 
 da_hidden_predicate(Goal) :- predicate_property(Goal, nodebug), !.
 da_hidden_predicate(Goal) :- predicate_property(Goal, hidden), !.
-da_hidden_predicate(Goal) :- qualified(Goal, _, UGoal), memberchk(UGoal, [da_debugee(_, _, _, _), da_trace(_, _, _), da_tracer_top_level(_, _)]), !.
+da_hidden_predicate(Goal) :- qualified(Goal, _, UGoal), memberchk(UGoal, [da_debugee(_, _, _, _), da_trace(_, _, _), da_tracer_top_level(_, _), da_terminal(_, _, _), toplevel_call(_)]), !.
 
 
 %!  da_frame_predicate_indicator(+FrameId, -PredicateIndicator) is det.
