@@ -117,9 +117,11 @@ da_server_handled_debugee_messages(Out, State0, State, Seq0, Seq) :-
         Seq   = Seq0
     ).
 
+:- det(da_server_handled_debugee_message/7).
 da_server_handled_debugee_message(_DebugeeThreadId,
                                   loaded_source(Reason, SourcePath),
                                   Out, State, State, Seq0, Seq) :-
+    !,
     file_base_name(SourcePath, BaseName),
     dap_event(Out, Seq0, "loadedSource", _{ reason : Reason,
                                             source : _{ name : BaseName,
@@ -131,6 +133,7 @@ da_server_handled_debugee_message(_DebugeeThreadId,
 da_server_handled_debugee_message(DebugeeThreadId,
                                   stopped(Reason, Description, Text, BreakpointIds),
                                   Out, State, State, Seq0, Seq) :-
+    !,
     dap_event(Out, Seq0, "stopped", _{ threadId         : DebugeeThreadId,
                                        reason           : Reason,
                                        description      : Description,
@@ -142,35 +145,47 @@ da_server_handled_debugee_message(DebugeeThreadId,
 da_server_handled_debugee_message(_DebugeeThreadId,
                                   stack_trace(RequestSeq, StackFrames0),
                                   Out, State, State, Seq0, Seq) :-
+    !,
     maplist(prolog_dap_stack_frame, StackFrames0, StackFrames),
     dap_response(Out, Seq0, RequestSeq, "stackTrace", _{stackFrames:StackFrames}),
     succ(Seq0, Seq).
 da_server_handled_debugee_message(_DebugeeThreadId,
                                   exception_info(RequestSeq, ExceptionTerm),
                                   Out, State, State, Seq0, Seq) :-
+    !,
     prolog_dap_exception(ExceptionTerm, ExceptionId),
     dap_response(Out, Seq0, RequestSeq, "exceptionInfo", _{exceptionId:ExceptionId, description:ExceptionId}),
     succ(Seq0, Seq).
 da_server_handled_debugee_message(_DebugeeThreadId,
                                   scopes(RequestSeq, Scopes0),
                                   Out, State, State, Seq0, Seq) :-
+    !,
     maplist(prolog_dap_scope, Scopes0, Scopes),
     dap_response(Out, Seq0, RequestSeq, "scopes", _{scopes:Scopes}),
     succ(Seq0, Seq).
 da_server_handled_debugee_message(_DebugeeThreadId,
                                   variables(RequestSeq, Variables0),
                                   Out, State, State, Seq0, Seq) :-
+    !,
     maplist(prolog_dap_variable, Variables0, Variables),
     dap_response(Out, Seq0, RequestSeq, "variables", _{variables:Variables}),
     succ(Seq0, Seq).
 da_server_handled_debugee_message(_DebugeeThreadId,
+                                  evaluate(RequestSeq, Result, Bindings),
+                                  Out, State, State, Seq0, Seq) :-
+    !,
+    format(string(Res), "~w~n~w.", [Bindings, Result]),
+    dap_response(Out, Seq0, RequestSeq, "evaluate", _{result:Res, variablesReference:0}),
+    succ(Seq0, Seq).
+da_server_handled_debugee_message(_DebugeeThreadId,
                                   exited(_ExitCode),
-                                  _Out, State, State, Seq, Seq).
+                                  _Out, State, State, Seq, Seq) :- !.
 %    dap_event(Out, Seq0, "exited", _{exitCode:ExitCode}),
 %    succ(Seq0, Seq).
 da_server_handled_debugee_message(DebugeeThreadId,
                                   thread_exited,
                                   Out, State0, State, Seq0, Seq) :-
+    !,
     dap_event(Out, Seq0, "thread", _{ reason   : "exited",
                                       threadId : DebugeeThreadId
                                     }),
@@ -337,6 +352,14 @@ da_server_command("variables", RequestSeq, Message, _Out, _W, State, State, Seq,
     _{ arguments:Args } :< Message,
     _{ variablesReference:VariablesRef } :< Args,
     maplist({RequestSeq, VariablesRef}/[debugee(PrologThreadId, _, _)]>>thread_send_message(PrologThreadId, variables(RequestSeq, VariablesRef)), State).
+da_server_command("evaluate", RequestSeq, Message, _Out, _W, State, State, Seq, Seq) :-
+    _{ arguments  : Args } :< Message,
+    _{ expression : SourceTerm,
+       frameId    : FrameId,
+       context    : Context
+     } :< Args,
+    debug(dap(tracer), "handling evaluate request arguments with ~w ~w ~w", [FrameId, SourceTerm, Context]),
+    maplist({RequestSeq, FrameId, SourceTerm}/[debugee(PrologThreadId, _, _)]>>thread_send_message(PrologThreadId, evaluate(RequestSeq, FrameId, SourceTerm)), State).
 da_server_command("setBreakpoints", RequestSeq, Message, Out, _W, State, State, Seq0, Seq) :-
     _{ arguments : Args } :< Message,
     _{ source      : DAPSource,
@@ -394,7 +417,8 @@ prolog_dap_thread(debugee(PrologThreadId, ThreadId, _),
 
 da_server_capabilities(_{ supportsConfigurationDoneRequest : true,
                           supportsExceptionInfoRequest     : true,
-                          supportsRestartFrame             : true
+                          supportsRestartFrame             : true,
+                          supportsEvaluateForHovers        : true
                         }
                       ).
 
