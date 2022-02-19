@@ -258,6 +258,7 @@ prolog_dap_in_frame_label(pc(PC), DAPLabel) :-
 da_server_handled_message("request", RequestSeq, Message0, Out, W, State0, State, Seq0, Seq) :-
     del_dict(command, Message0, Command, Message),
     da_server_command(Command, RequestSeq, Message, Out, W, State0, State, Seq0, Seq).
+da_server_handled_message("response", _Seq, _Message, _Out, _W, State, State, Seq, Seq).
 
 da_server_command("initialize", RequestSeq, Message, Out, _W, State, State, Seq0, Seq) :-
     _{ arguments:Args } :< Message,
@@ -269,9 +270,9 @@ da_server_command("initialize", RequestSeq, Message, Out, _W, State, State, Seq0
     succ(Seq1, Seq).
 da_server_command("launch", RequestSeq, Message, Out, W, State, [Debugee|State], Seq0, Seq) :-
     _{ arguments:Args } :< Message,
-    da_launched(Args, W, Debugee),
-    dap_response(Out, Seq0, RequestSeq, "launch"),
-    succ(Seq0, Seq).
+    da_launched(Args, Out, W, Debugee, Seq0, Seq1),
+    dap_response(Out, Seq1, RequestSeq, "launch"),
+    succ(Seq1, Seq).
 da_server_command("configurationDone", RequestSeq, _Message, Out, _W, State, State, Seq0, Seq) :-
     da_configured(State),
     dap_response(Out, Seq0, RequestSeq, "configurationDone"),
@@ -357,7 +358,7 @@ da_server_command("source", RequestSeq, Message, Out, _W, State, State, Seq0, Se
         da_clause_source_term(ClauseRef, Module, DecompiledClause, VariablesOffset, SourceClause, _, _),
         with_output_to(string(Content), portray_clause(current_output, SourceClause, [module(Module)])),
         dap_response(Out, Seq0, RequestSeq, "source", _{content:Content})
-    ;   dap_response(Out, Seq0, RequestSeq, "source", _{               })
+    ;   dap_error(Out, Seq0, RequestSeq, "source", "Cannot provide source code for requested predicate")
     ),
     succ(Seq0, Seq).
 da_server_command(Command, RequestSeq, _Message, Out, _W, State, State, Seq0, Seq) :-
@@ -399,8 +400,30 @@ da_server_capabilities(_{ supportsConfigurationDoneRequest : true,
 
 da_initialized(_).
 
-da_launched(Args, W, debugee(PrologThreadId, ThreadId, Goal)) :-
+:- det(da_launched/6).
+da_launched(Args, Out, W, debugee(PrologThreadId, ThreadId, run_in_terminal), Seq0, Seq) :-
+    _{ goal: "$run_in_terminal" } :< Args,
+    !,
+    thread_self(ServerThreadId),
+    tcp_socket(ServerSocket),
+    tcp_setopt(ServerSocket, reuseaddr),
+    tcp_bind(ServerSocket, Port),
+    thread_create(da_terminal(ServerSocket, ServerThreadId, W), PrologThreadId),
+    number_string(Port, PortString),
+    getenv('HOME', H),
+    dap_request(Out, Seq0,
+                "runInTerminal",
+                _{   kind  : "integrated",
+                     cwd   : H,
+                     title : "Toplevel",
+                     args  : ["telnet",  "127.0.0.1", PortString]
+                 }),
+    succ(Seq0, Seq),
+    thread_property(PrologThreadId, id(ThreadId)).
+
+da_launched(Args, _Out, W, debugee(PrologThreadId, ThreadId, Goal), Seq, Seq) :-
     _{ cwd: CWD, module: ModulePath, goal: GoalString } :< Args,
+    !,
     cd(CWD),
     term_string(Goal, GoalString),
     thread_self(ServerThreadId),
