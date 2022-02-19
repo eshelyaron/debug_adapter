@@ -6,7 +6,7 @@
            da_frame_parent/2,
            da_frame_clause/2,
            da_frame_predicate_indicator/2,
-           da_frame_alternative/3,
+           da_alternative/2,
            da_frame_alternative_frame/2,
            da_frame_parent_pc/2,
            da_frame_pc_stack/4,
@@ -14,6 +14,7 @@
            da_frame_clause_source_span/2,
            da_frame_port_source_span/3,
            da_frame_scopes/4,
+           da_frame_evaluate/4,
            da_referenced_variables/2
        ]
    ).
@@ -137,27 +138,39 @@ da_frame_predicate_indicator(FrameId, PredicateIndicator) :-
     prolog_frame_attribute(FrameId, predicate_indicator, PredicateIndicator).
 
 
-%!  da_frame_alternative(+FrameId, +ChoicePoint, -Alternative) is det.
+%!  da_alternative(+ChoicePoint, -Alternative) is det.
 %
 %   Alternative is unified with a term describing the location from which execution will be
-%   resumed in case the current goal of FrameId fails, which is one of the following:
+%   resumed in case the current goal fails, which is one of the following:
 %    - frame(AlternativeFrameId)
-%      If frame FrameId has an _alternative frame_, where AlternativeFrameId is the IDf of the
-%      frame from which execution will resume in case the goal associated with frame FrameId fails,
+%      If ChoicePoint refers to an _alternative frame_, where AlternativeFrameId is the ID of the
+%      frame from which execution will resume in case the goal associated with the current frame fails,
 %    - jump(PC)
-%      If frame FrameId has as in-clause choice point, where PC is the program counter in the frame
+%      If ChoicePoint is an in-clause choice point, where PC is the program counter in the frame
 %      from which execution will resume is case the current goal fails or
+%    - clause(Clause)
+%      If ChoicePoint refers to an alternative clause Clause
 %    - null
-%      If the goal associated with frame FrameId has no alternative, i.e. it must succeed for
-%      the frame to succeed
+%      If ChoicePoint is `none`
 
-:- det(da_frame_alternative/3).
-da_frame_alternative(_FrameId, ChoicePoint, jump(PC)) :-
-    prolog_choice_attribute(ChoicePoint, type, jump),
+:- det(da_alternative/2).
+da_alternative(ChoicePoint, Alternative) :-
+    prolog_choice_attribute(ChoicePoint, type, Type),
+    da_alternative(Type, ChoicePoint, Alternative).
+
+:- det(da_alternative/3).
+da_alternative(jump, ChoicePoint, jump(PC)) :-
     !,
     prolog_choice_attribute(ChoicePoint, pc, PC).
-da_frame_alternative(FrameId, _ChoicePoint, frame(AlternativeFrameId)) :-
-    da_frame_alternative_frame(FrameId, AlternativeFrameId).
+da_alternative(clause, ChoicePoint, clause(Clause)) :-
+    !,
+    prolog_choice_attribute(ChoicePoint, clause, Clause).
+da_alternative(none, _, null) :- !.
+da_alternative(debug, _, null) :- !.
+da_alternative(top, _, null) :- !.
+da_alternative(_, ChoicePoint, frame(Frame)) :-
+    !,
+    prolog_choice_attribute(ChoicePoint, frame, Frame).
 
 
 %!  da_frame_alternative_frame(+FrameId, -AlternativeFrameId) is det.
@@ -166,7 +179,7 @@ da_frame_alternative(FrameId, _ChoicePoint, frame(AlternativeFrameId)) :-
 %   with the atom `null` if FrameId does not have an alternative frame.
 
 :- det(da_frame_alternative_frame/2).
-da_frame_alternative_frame(FrameId, AlternativeFrameId) :-
+da_frame_alternative_frame(FrameId, frame(AlternativeFrameId)) :-
     prolog_frame_attribute(FrameId, alternative, AlternativeFrameId),
     !.
 da_frame_alternative_frame(_, null).
@@ -388,3 +401,34 @@ da_frame_locals(Frame, I, VarNames, Variables) :-
         da_frame_locals(Frame, NI, VarNames, T)
     ;   Variables = []
     ).
+
+
+:- det(da_frame_evaluate/4).
+da_frame_evaluate(FrameId, SourceTerm, Result, Bindings) :-
+    read_term_from_atom(SourceTerm, Goal, [variable_names(Bindings)]),
+    da_frame_clause(FrameId, ClauseRef),
+    da_clause_variable_names(ClauseRef, ClauseVarNames),
+    da_frame_unify_variables(FrameId, ClauseVarNames, Bindings),
+    da_evaluate(Goal, Result).
+
+
+:- det(da_evaluate/2).
+da_evaluate(Goal, Result) :-
+    catch(Goal, Result, true),
+    !,
+    (   var(Result)
+    ->  Result = true
+    ;   true
+    ).
+da_evaluate(_, false).
+
+
+:- det(da_frame_unify_variables/3).
+da_frame_unify_variables(_FrameId, _ClauseVarNames, [               ]) :- !.
+da_frame_unify_variables( FrameId,  ClauseVarNames, [VarName=Value|T]) :- !,
+    (   arg(I, ClauseVarNames, VarName)
+    ->  prolog_frame_attribute(FrameId, argument(I), Value),
+        da_frame_unify_variables(FrameId, ClauseVarNames, T)
+    ;   true
+    ),
+    da_frame_unify_variables(FrameId, ClauseVarNames, T).

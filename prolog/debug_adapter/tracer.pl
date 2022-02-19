@@ -161,6 +161,10 @@ prolog_dap_stopped_reason(Port, _, Reason, null, null) :-
     atom_string(Atom, Reason).
 
 :- det(da_tracer_handled_message/7).
+da_tracer_handled_message(evaluate(RequestId, FrameId, SourceTerm), _Port, _Frame, _Choice, loop, S, W) :-
+    !,
+    da_frame_evaluate(FrameId, SourceTerm, Result, Bindings),
+    da_debugee_emitted_message(evaluate(RequestId, Result, Bindings), S, W).
 da_tracer_handled_message(stack_trace(RequestId), Port, Frame, Choice, loop, S, W) :-
     !,
     da_stack_frame_at_port(Frame, Port, Choice, ActiveFrame),

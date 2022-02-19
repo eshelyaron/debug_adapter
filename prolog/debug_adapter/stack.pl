@@ -37,13 +37,13 @@ da_stack_trace(FrameId, StackTrace) :-
     da_frame_pc_stack(ParentFrameId, PC, da_stack_frame_info, StackTrace).
 
 da_stack_frame_info(FrameId, PC,
-                    stack_frame(FrameId, pc(PC), PredicateIndicator, label(frame, AlternativeFrameId), SourceSpan)) :-
+                    stack_frame(FrameId, pc(PC), PredicateIndicator, Alternative, SourceSpan)) :-
     da_frame_predicate_indicator(FrameId, PredicateIndicator),
-    da_frame_alternative_frame(FrameId, AlternativeFrameId),
+    da_frame_alternative_frame(FrameId, Alternative),
     da_frame_pc_source_span(FrameId, PC, SourceSpan).
 
 da_stack_frame_at_port(FrameId, Port, ChoicePoint,
                        stack_frame(FrameId, port(Port), PredicateIndicator, Alternative, SourceSpan)) :-
     da_frame_predicate_indicator(FrameId, PredicateIndicator),
-    da_frame_alternative(FrameId, ChoicePoint, Alternative),
+    da_alternative(ChoicePoint, Alternative),
     da_frame_port_source_span(FrameId, Port, SourceSpan).
