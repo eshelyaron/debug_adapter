@@ -207,7 +207,13 @@ da_server_handle_debugee_message(DebugeeThreadId,
                                       threadId : DebugeeThreadId
                                     }),
     succ(Seq0, Seq),
-    asserta(da_server_debugee_thread(DebugeeThreadId, running)).
+    asserta(da_server_debugee_thread(DebugeeThreadId, running)),
+    (   da_server_disconnecting
+    ->  catch(thread_send_message(DebugeeThreadId, disconnect),
+              error(existence_error(thread, DebugeeThreadId), _),
+              true)
+    ;   true
+    ).
 
 
 prolog_dap_scope(scope(Name, VariablesRef, SourceSpan),
