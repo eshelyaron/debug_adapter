@@ -153,6 +153,7 @@ da_tracer_stopped_reason(_, step_out, "step out", null, null, null) :- !.
 da_tracer_stopped_reason(_, next   , "step over", null, null, null) :- !.
 da_tracer_stopped_reason(_, restart_frame, "restart", null, null, null) :- !.
 da_tracer_stopped_reason(_, continue, "breakpoint", null, null, null) :- !.
+da_tracer_stopped_reason(_, pause,    "pause",      null, null, null) :- !.
 
 
 :- det(prolog_dap_stopped_reason/5).
@@ -181,25 +182,31 @@ da_tracer_handled_message(variables(RequestId, VariablesRef), _Port, _Frame, _Ch
 da_tracer_handled_message(exception_info(RequestId), exception(Exception), _Frame, _Choice, loop, S, W) :-
     !,
     da_debugee_emitted_message(exception_info(RequestId, Exception), S, W).
-da_tracer_handled_message(step_in, _Port, _Frame, _Choice, continue, _S, _W) :-
+da_tracer_handled_message(step_in, _Port, _Frame, _Choice, continue, S, W) :-
     !,
+    da_debugee_emitted_message(continued, S, W),
     asserta(da_tracer_last_action(step_in)).
-da_tracer_handled_message(step_out, _Port, _Frame, _Choice, up, _S, _W) :-
+da_tracer_handled_message(step_out, _Port, _Frame, _Choice, up, S, W) :-
     !,
+    da_debugee_emitted_message(continued, S, W),
     asserta(da_tracer_last_action(step_out)).
-da_tracer_handled_message(disconnect, _Port, _Frame, _Choice, nodebug, _S, _W) :-
+da_tracer_handled_message(disconnect, _Port, _Frame, _Choice, nodebug, S, W) :-
     !,
+    da_debugee_emitted_message(continued, S, W),
     asserta(da_tracer_last_action(disconnect)).
-da_tracer_handled_message(continue, _Port, _Frame, _Choice, continue, _S, _W) :-
+da_tracer_handled_message(continue, _Port, _Frame, _Choice, continue, S, W) :-
     !,
+    da_debugee_emitted_message(continued, S, W),
     asserta(da_tracer_last_action(continue)).
 da_tracer_handled_message(restart_frame(FrameId), _Port, _Frame, _Choice, retry(FrameId), _S, _W) :-
     !,
     asserta(da_tracer_last_action(restart_frame)).
-da_tracer_handled_message(next, _Port, _Frame, _Choice, skip, _S, _W) :-
+da_tracer_handled_message(next, _Port, _Frame, _Choice, skip, S, W) :-
     !,
+    da_debugee_emitted_message(continued, S, W),
     asserta(da_tracer_last_action(next)).
 da_tracer_handled_message(configuration_done, _, _, _, loop, _, _).
+
 
 %! da_tracer_yield(TracerAction) is det.
 %
