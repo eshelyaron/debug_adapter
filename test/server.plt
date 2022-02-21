@@ -1,6 +1,8 @@
 :- initialization(main, main).
 
-main :- run_tests.
+main :-
+    debug(dap(_)),
+    run_tests.
 
 user:da_server_test_marker_predicate.
 
@@ -98,7 +100,6 @@ test(configurationDone, [ setup(dapipe(SIn, SOut, CIn, COut)),
     _{ supportsConfigurationDoneRequest : true } :< Body,
     source_file(user:da_server_test_marker_predicate, ThisFile),
     file_directory_name(ThisFile, CWD),
-    debug(dap(test), "CWD: ~w", [CWD]),
     dap_request_response(CIn, COut, 2, "launch", _{ cwd    : CWD,
                                                     module : "./target/foo.pl",
                                                     goal   : foo
@@ -106,6 +107,7 @@ test(configurationDone, [ setup(dapipe(SIn, SOut, CIn, COut)),
                          _Body),
     dap_request_response(CIn, COut, 3, "configurationDone"),
     dap_request_response(CIn, COut, 4, "disconnect"),
-    thread_join(ServerThreadId, exited(0)).
+    thread_join(ServerThreadId, E),
+    assertion(E == exited(0)).
 
 :- end_tests(server).

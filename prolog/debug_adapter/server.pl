@@ -132,8 +132,14 @@ da_server_handle_debugee_message(DebugeeThreadId,
                                        text             : Text,
                                        hitBreakpointIds : BreakpointIds
                                      }
-                           ),
-    succ(Seq0, Seq).
+             ),
+    succ(Seq0, Seq),
+    (   da_server_disconnecting
+    ->  catch(thread_send_message(DebugeeThreadId, disconnect),
+              error(existence_error(thread, DebugeeThreadId), _),
+              true)
+    ;   true
+    ).
 da_server_handle_debugee_message(DebugeeThreadId,
                                  continued,
                                  Out, Seq0, Seq) :-
@@ -193,6 +199,15 @@ da_server_handle_debugee_message(DebugeeThreadId,
                                     }),
     succ(Seq0, Seq),
     retract(da_server_debugee_thread(DebugeeThreadId, _)).
+da_server_handle_debugee_message(DebugeeThreadId,
+                                 thread_started,
+                                 Out, Seq0, Seq) :-
+    !,
+    dap_event(Out, Seq0, "thread", _{ reason   : "started",
+                                      threadId : DebugeeThreadId
+                                    }),
+    succ(Seq0, Seq),
+    asserta(da_server_debugee_thread(DebugeeThreadId, running)).
 
 
 prolog_dap_scope(scope(Name, VariablesRef, SourceSpan),
@@ -441,9 +456,6 @@ dap_prolog_source_breakpoint(P, D, source_breakpoint(L, C)) :-
     da_source_file_offsets_line_column_pairs(P, [C], [L-5]).  % 5 is a "guess" of the indentation. TODO - locate first term in line intelligently
 
 
-da_server_disconnect_debugee(debugee(BlobThreadId, _EphermalThreadId, _Goal)) :-
-    thread_send_message(BlobThreadId, disconnect).
-
 da_server_capabilities(_{ supportsConfigurationDoneRequest : true,
                           supportsExceptionInfoRequest     : true,
                           supportsRestartFrame             : true,
@@ -461,7 +473,7 @@ da_launch(Args, Out, W, Seq0, Seq) :-
     tcp_socket(ServerSocket),
     tcp_setopt(ServerSocket, reuseaddr),
     tcp_bind(ServerSocket, Port),
-    thread_create(da_terminal(ServerSocket, ServerThreadId, W), PrologThreadId),
+    thread_create(da_terminal(ServerSocket, ServerThreadId, W), _PrologThreadId),
     number_string(Port, PortString),
     getenv('HOME', H),
     dap_request(Out, Seq0,
@@ -471,9 +483,7 @@ da_launch(Args, Out, W, Seq0, Seq) :-
                      title : "Toplevel",
                      args  : ["telnet",  "127.0.0.1", PortString]
                  }),
-    succ(Seq0, Seq),
-    thread_property(PrologThreadId, id(ThreadId)),
-    asserta(da_server_debugee_thread(ThreadId, running)).
+    succ(Seq0, Seq).
 
 da_launch(Args, _Out, W, Seq, Seq) :-
     _{ cwd: CWD, module: ModulePath, goal: GoalString } :< Args,
@@ -481,9 +491,7 @@ da_launch(Args, _Out, W, Seq, Seq) :-
     cd(CWD),
     term_string(Goal, GoalString),
     thread_self(ServerThreadId),
-    thread_create(da_debugee(ModulePath, Goal, ServerThreadId, W), PrologThreadId),
-    thread_property(PrologThreadId, id(ThreadId)),
-    asserta(da_server_debugee_thread(ThreadId, running)).
+    thread_create(da_debugee(ModulePath, Goal, ServerThreadId, W), _PrologThreadId).
 
 da_configured([debugee(_, ThreadId, _)|T]) :-
     thread_send_message(ThreadId, configuration_done),
