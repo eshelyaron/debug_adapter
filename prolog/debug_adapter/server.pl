@@ -109,8 +109,8 @@ da_server_handle_debugee_messages(Out, Seq0, Seq) :-
 
 :- det(da_server_handle_debugee_message/5).
 da_server_handle_debugee_message(_DebugeeThreadId,
-                                  loaded_source(Reason, SourcePath),
-                                  Out, Seq0, Seq) :-
+                                 loaded_source(Reason, SourcePath),
+                                 Out, Seq0, Seq) :-
     !,
     file_base_name(SourcePath, BaseName),
     dap_event(Out, Seq0, "loadedSource", _{ reason : Reason,
@@ -121,9 +121,11 @@ da_server_handle_debugee_message(_DebugeeThreadId,
              ),
     succ(Seq0, Seq).
 da_server_handle_debugee_message(DebugeeThreadId,
-                                  stopped(Reason, Description, Text, BreakpointIds),
-                                  Out, Seq0, Seq) :-
+                                 stopped(Reason, Description, Text, BreakpointIds),
+                                 Out, Seq0, Seq) :-
     !,
+    retract(da_server_debugee_thread(DebugeeThreadId, _)),
+    asserta(da_server_debugee_thread(DebugeeThreadId, stopped)),
     dap_event(Out, Seq0, "stopped", _{ threadId         : DebugeeThreadId,
                                        reason           : Reason,
                                        description      : Description,
@@ -131,6 +133,16 @@ da_server_handle_debugee_message(DebugeeThreadId,
                                        hitBreakpointIds : BreakpointIds
                                      }
                            ),
+    succ(Seq0, Seq).
+da_server_handle_debugee_message(DebugeeThreadId,
+                                 continued,
+                                 Out, Seq0, Seq) :-
+    !,
+    retract(da_server_debugee_thread(DebugeeThreadId, _)),
+    asserta(da_server_debugee_thread(DebugeeThreadId, running)),
+    dap_event(Out, Seq0, "continued", _{ threadId            : DebugeeThreadId,
+                                         allThreadsContinued : null
+                                       }),
     succ(Seq0, Seq).
 da_server_handle_debugee_message(_DebugeeThreadId,
                                   stack_trace(RequestSeq, StackFrames0),
@@ -312,6 +324,18 @@ da_server_command("exceptionInfo", RequestSeq, Message, Out, _W, Seq0, Seq) :-
           _Catcher,
           (dap_error(Out, Seq0, RequestSeq, "exceptionInfo", null), succ(Seq0, Seq))
          ).
+da_server_command("pause", RequestSeq, Message, Out, _W, Seq0, Seq) :-
+    !,
+    _{ arguments:Args } :< Message,
+    _{ threadId:ThreadId } :< Args,
+    (   da_server_debugee_thread(ThreadId, running)
+    ->  dap_response(Out, Seq0, RequestSeq, "pause"),
+        thread_signal(ThreadId, (retractall(da_tracer:da_tracer_last_action(_)),
+                                 asserta(da_tracer:da_tracer_last_action(pause)))),
+        thread_signal(ThreadId, trace)
+    ;   dap_error(Out, Seq0, RequestSeq, "pause", "Thread is not running")
+    ),
+    succ(Seq0, Seq).
 da_server_command("stepIn", RequestSeq, Message, Out, _W, Seq0, Seq) :-
     !,
     _{ arguments:Args } :< Message,
