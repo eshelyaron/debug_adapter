@@ -42,6 +42,7 @@ prolog:open_source_hook(Path, Stream, _Options) :-
 % :- meta_predicate da_debugee(?, 0, ?, ?).
 
 da_debugee(ModulePath, Goal, ServerThreadId, ServerInterruptHandle) :-
+    da_debugee_emitted_message(thread_started, ServerThreadId, ServerInterruptHandle),
     thread_get_message(_), % wait for a trigger from the server
     debug(dap(tracer), "starting debugee thread with source file ~w and goal ~w", [ModulePath, Goal]),
     absolute_file_name(ModulePath, AbsModulePath, []),
@@ -95,6 +96,7 @@ da_tracer_setup(ServerThreadId, ServerInterruptHandle) :-
 
 
 da_terminal(ServerSocket, ServerThreadId, ServerInterruptHandle) :-
+    da_debugee_emitted_message(thread_started, ServerThreadId, ServerInterruptHandle),
     da_terminal_setup(ServerSocket),
     da_tracer_setup(ServerThreadId, ServerInterruptHandle),
     prolog.
