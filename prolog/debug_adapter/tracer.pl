@@ -90,6 +90,11 @@ da_tracer_top_level(Goal, ExitCode) :-
 da_tracer_setup(ServerThreadId, ServerInterruptHandle) :-
     asserta(da_debugee_server(ServerThreadId, ServerInterruptHandle)),
     asserta(da_tracer_last_action(null)),
+    asserta((user:thread_message_hook(Term, Kind, Lines) :-
+                 da_debugee_emitted_message(output(Term, Kind, Lines),
+                                            ServerThreadId,
+                                            ServerInterruptHandle),
+                 false)),
     set_prolog_flag(gui_tracer, true),
     visible(+all),
     prolog_skip_level(_, very_deep).

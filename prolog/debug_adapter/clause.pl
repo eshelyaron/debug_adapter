@@ -9,6 +9,7 @@
    ).
 
 :- use_module(source).
+:- use_module(library(prolog_source)).
 
 /** <module> DAP library module for reasoning about Prolog clauses
 

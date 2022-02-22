@@ -151,6 +151,16 @@ da_server_handle_debugee_message(DebugeeThreadId,
                                        }),
     succ(Seq0, Seq).
 da_server_handle_debugee_message(_DebugeeThreadId,
+                                 output(Term, _Kind, _Lines),
+                                 Out, Seq0, Seq) :-
+    !,
+    message_to_string(Term, String0),
+    string_concat(String0, "\n", String),
+    dap_event(Out, Seq0, "output", _{ category : "stdout",
+                                      output   : String
+                                    }),
+    succ(Seq0, Seq).
+da_server_handle_debugee_message(_DebugeeThreadId,
                                   stack_trace(RequestSeq, StackFrames0),
                                   Out, Seq0, Seq) :-
     !,
