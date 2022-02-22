@@ -11,6 +11,7 @@
        ]
    ).
 
+:- use_module(library(option)).
 :- use_module(library(prolog_clause)).
 
 /** <module> DAP library module for reasoning about Prolog sources
