@@ -21,7 +21,7 @@ Now run `M-x dap-debug` in a Prolog buffer and have fun.
 
 Most of the DAP specification is implemented and operational. For specific features status, see below.
 
-Currently only tested with GNU/Emacs and `dap-mode` until we have a VS Code extension.
+Currently only tested with GNU Emacs and `dap-mode` until we have a VS Code extension.
 
 
 ### DAP Events implementation coverage
@@ -120,7 +120,7 @@ Some of the needed steps towards these goals are:
 - [x] Providing source code for dynamic predicates through decompilation
 - [x] Installing breakpoints at source positions
 - [x] Providing information about variable bindings in each frame
-- [ ] Editing and reloading source code during break
+- [x] Editing and reloading source code during break
 - [ ] ...
 
 ## Demo
