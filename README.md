@@ -20,6 +20,7 @@ Now run `M-x dap-debug` in a Prolog buffer and have fun.
 ## Status
 
 Most of the DAP specification is implemented and operational. For specific features status, see below.
+
 Currently only tested with GNU/Emacs and `dap-mode` until we have a VS Code extension.
 
 
@@ -31,21 +32,21 @@ different situtations.
 |----------------|--------|
 | Breakpoint     |        |
 | Capabilities   |        |
-| Continued      | ✔      |
-| Exited         | ✔      |
-| Initialized    | ✔      |
+| Continued      | ✅      |
+| Exited         | ✅      |
+| Initialized    | ✅      |
 | Invalidated    |        |
-| LoadedSource   | ✔      |
+| LoadedSource   | ✅      |
 | Memory         |        |
 | Module         |        |
-| Output         | ✔      |
+| Output         | ✅      |
 | Process        |        |
 | ProgressEnd    |        |
 | ProgressStart  |        |
 | ProgressUpdate |        |
-| Stopped        | ✔      |
+| Stopped        | ✅      |
 | Terminated     |        |
-| Thread         | ✔      |
+| Thread         | ✅      |
 
 
 ### DAP Requests implementation coverage
@@ -57,43 +58,43 @@ information about the current runtime.
 | Attach                    |        |
 | BreakpointLocations       |        |
 | Completions               |        |
-| ConfigurationDone         | ✔      |
-| Continue                  | ✔      |
+| ConfigurationDone         | ✅      |
+| Continue                  | ✅      |
 | DataBreakpointInfo        |        |
 | Disassemble               |        |
-| Disconnect                | ✔      |
-| Evaluate                  | ✔      |
-| ExceptionInfo             | ✔      |
+| Disconnect                | ✅      |
+| Evaluate                  | ✅      |
+| ExceptionInfo             | ✅      |
 | Goto                      |        |
 | GotoTargets               |        |
-| Initialize                | ✔      |
-| Launch                    | ✔      |
+| Initialize                | ✅      |
+| Launch                    | ✅      |
 | LoadedSources             |        |
 | Modules                   |        |
-| Next                      | ✔      |
-| Pause                     | ✔      |
+| Next                      | ✅      |
+| Pause                     | ✅      |
 | ReadMemory                |        |
 | Restart                   |        |
-| RestartFrame              | ✔      |
+| RestartFrame              | ✅      |
 | ReverseContinue           |        |
-| Scopes                    | ✔      |
-| SetBreakpoints            | ✔      |
+| Scopes                    | ✅      |
+| SetBreakpoints            | ✅      |
 | SetDataBreakpoints        |        |
 | SetExceptionBreakpoints   |        |
 | SetExpression             |        |
 | SetFunctionBreakpoints    |        |
 | SetInstructionBreakpoints |        |
 | SetVariable               |        |
-| Source                    | ✔      |
-| StackTrace                | ✔      |
+| Source                    | ✅      |
+| StackTrace                | ✅      |
 | StepBack                  |        |
-| StepIn                    | ✔      |
+| StepIn                    | ✅      |
 | StepInTargets             |        |
-| StepOut                   | ✔      |
+| StepOut                   | ✅      |
 | Terminate                 |        |
 | TerminateThreads          |        |
-| Threads                   | ✔      |
-| Variables                 | ✔      |
+| Threads                   | ✅      |
+| Variables                 | ✅      |
 | WriteMemory               |        |
 
 
@@ -103,7 +104,7 @@ client to trigger client side operations.
 
 | Reverse Request | Status |
 |-----------------|--------|
-| RunInTerminal   | ✔      |
+| RunInTerminal   | ✅      |
 
 
 ## Roadmap
