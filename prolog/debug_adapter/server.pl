@@ -74,12 +74,12 @@ da_server_loop(Seq0, In, Out, R, W) :-
     da_server_handle_streams(In, R, Inputs, Out, W, Seq0, Seq),
     da_server_loop(Seq, In, Out, R, W).
 
+
 :- det(da_server_handle_streams/7).
 da_server_handle_streams(In, R, [H|T], Out, W, Seq0, Seq) :-
     !,
     da_server_handle_stream(In, R, H, Out, W, Seq0, Seq1),
     da_server_handle_streams(In, R, T, Out, W, Seq1, Seq).
-%    debug(dap(server), "Done handling stream ~w, ~w ~w ~w", [H, Seq0, Seq1, Seq]).
 da_server_handle_streams(_, _, [], _, _, Seq, Seq).
 
 
@@ -97,6 +97,13 @@ da_server_handle_stream(_In, R, R, Out, _, Seq0, Seq) :-
     get_code(R, _),
     da_server_handle_debugee_messages(Out, Seq0, Seq).
 
+
+da_server_handle_message("request", RequestSeq, Message0, Out, W, Seq0, Seq) :-
+    del_dict(command, Message0, Command, Message),
+    da_server_command(Command, RequestSeq, Message, Out, W, Seq0, Seq).
+da_server_handle_message("response", _Seq, _Message, _Out, _W, Seq, Seq).
+
+
 da_server_handle_debugee_messages(Out, Seq0, Seq) :-
     (   thread_peek_message(_)
     ->  thread_get_message(DebugeeThreadId-Message),
@@ -106,6 +113,7 @@ da_server_handle_debugee_messages(Out, Seq0, Seq) :-
         da_server_handle_debugee_messages(Out, Seq1, Seq)
     ;   Seq = Seq0
     ).
+
 
 :- det(da_server_handle_debugee_message/5).
 da_server_handle_debugee_message(_DebugeeThreadId,
@@ -198,8 +206,6 @@ da_server_handle_debugee_message(_DebugeeThreadId,
 da_server_handle_debugee_message(_DebugeeThreadId,
                                   exited(_ExitCode),
                                   _Out, Seq, Seq) :- !.
-%    dap_event(Out, Seq0, "exited", _{exitCode:ExitCode}),
-%    succ(Seq0, Seq).
 da_server_handle_debugee_message(DebugeeThreadId,
                                   thread_exited,
                                   Out, Seq0, Seq) :-
@@ -302,11 +308,6 @@ prolog_dap_in_frame_label(port(Port), DAPLabel) :-
 prolog_dap_in_frame_label(pc(PC), DAPLabel) :-
     number_string(PC, DAPLabel).
 
-
-da_server_handle_message("request", RequestSeq, Message0, Out, W, Seq0, Seq) :-
-    del_dict(command, Message0, Command, Message),
-    da_server_command(Command, RequestSeq, Message, Out, W, Seq0, Seq).
-da_server_handle_message("response", _Seq, _Message, _Out, _W, Seq, Seq).
 
 da_server_command("initialize", RequestSeq, Message, Out, _W, Seq0, Seq) :-
     !,
@@ -459,15 +460,15 @@ da_server_command(Command, RequestSeq, _Message, Out, _W, Seq0, Seq) :-
     dap_error(Out, Seq0, RequestSeq, Command, ErrorMessage),
     succ(Seq0, Seq).
 
-dap_source_path(D, path(P)) :- _{ path : P0 } :< D, !, atom_string(P, P0).
-dap_source_path(D, reference(R)) :- _{ sourceReference : R } :< D.
+dap_source_path(D, path(P)     ) :- _{ path            : P0 } :< D, !, atom_string(P, P0).
+dap_source_path(D, reference(R)) :- _{ sourceReference : R  } :< D.
 
-dap_prolog_source_breakpoint(P, D, source_breakpoint(L, C)) :-
+dap_prolog_source_breakpoint(P, D, source_breakpoint(L, C, null, 0, null)) :-
     _{ line   : L,
        column : C0
      } :< D, !,
     da_source_file_offsets_line_column_pairs(P, [C], [L-C0]).
-dap_prolog_source_breakpoint(P, D, source_breakpoint(L, C)) :-
+dap_prolog_source_breakpoint(P, D, source_breakpoint(L, C, null, 0, null)) :-
     _{ line   : L } :< D,
     da_source_file_offsets_line_column_pairs(P, [C], [L-5]).  % 5 is a "guess" of the indentation. TODO - locate first term in line intelligently
 
