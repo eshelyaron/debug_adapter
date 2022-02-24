@@ -1,14 +1,16 @@
 # Debug Adapter Protocol for SWI-Prolog
-This repository hosts the development of [DAP](https://microsoft.github.io/debug-adapter-protocol/) for [SWI-Prolog](https://www.swi-prolog.org/), written in Prolog.
+
+Welcome to [the SWI-Prolog Debug Adapter Protocol server](https://github.com/eshelyaron/debug_adapter),
+an implementation of [DAP](https://microsoft.github.io/debug-adapter-protocol/) for
+[SWI-Prolog](https://www.swi-prolog.org/), written in Prolog.
 
 ## Installation
 
-`debug_adapter` is available as a SWI-Prolog [pack](https://www.swi-prolog.org/pack/list?p=debug_adapter), to use it simply run the following goal in the SWI-Prolog toplevel:
+`debug_adapter` is available as a SWI-Prolog [pack](https://www.swi-prolog.org/pack/list?p=debug_adapter),
+to use it simply run the following goal in the SWI-Prolog toplevel:
 ```prolog
 ?- pack_install(debug_adapter).
 ```
-
-To verify the installation, run `swipl -g "[library(debug_adapter/main)]" -t halt -- -h`.
 
 If you're using GNU Emacs with `dap-mode`, add the following lines to your `init.el`:
 ```elisp

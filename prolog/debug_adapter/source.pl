@@ -4,7 +4,7 @@
            da_source_subterm_span/5,
            da_source_layout_span/4,
            da_source_clause_cached_reference/2,
-           da_source_clause_reference/3,
+           da_source_clause_reference/2,
            da_clause_decompiled/4,
            qualified/3,
            da_source_file_offsets_line_column_pairs/3
@@ -21,6 +21,8 @@ This module contains predicates for retrieving information about the _spans_ and
 source terms for debugging purposes.
 
 */
+
+:- predicate_options(da_source_subterm_span/5, 5, [pass_to(da_source_layout_span/4, 4)]).
 
 %!  da_source_subterm_span(+SourceFile, +SourceLayout, +SubTermPositionPath, -SubTermSourceSpan, +Options) is det.
 
@@ -49,30 +51,32 @@ da_source_subterm_layout(parentheses_term_position(_,_,Pos), Path, SPos) :-
 da_source_subterm_layout(Layout, _Path, Layout).
 
 
+:- predicate_options(da_source_layout_span/4, 4, [port(atom)]).
+
 %!  da_source_layout_span(+File, +Layout, -SourceSpan, +Options) is det.
 
 :- det(da_source_layout_span/4).
 da_source_layout_span(File, Layout, SourceSpan, Options) :-
     option(port(Port), Options, call),
-    da_source_layout_port_span(File, Layout, Port, SourceSpan, Options).
+    da_source_layout_port_span(File, Layout, Port, SourceSpan).
 
 
-%!  da_source_layout_port_span(+File, +Layout, +Port, -SourceSpan, +Options) is det.
+%!  da_source_layout_port_span(+File, +Layout, +Port, -SourceSpan) is det.
 
-:- det(da_source_layout_port_span/5).
-da_source_layout_port_span(File, Layout, Port, span(File, SL, SC, EL, EC), _Options) :-
+:- det(da_source_layout_port_span/4).
+da_source_layout_port_span(File, Layout, Port, span(File, SL, SC, EL, EC)) :-
     entry_port(Port),
     !,
     arg(1, Layout, SO),
     arg(2, Layout, EO),
     da_source_file_offsets_line_column_pairs(File, [SO, EO], [SL-SC, EL-EC]).
-da_source_layout_port_span(File, Layout, Port, span(File, SL, SC, EL, EC), _Options) :-
+da_source_layout_port_span(File, Layout, Port, span(File, SL, SC, EL, EC)) :-
     exit_port(Port),
     !,
     arg(2, Layout, SO),
     succ(SO, EO),
     da_source_file_offsets_line_column_pairs(File, [SO, EO], [SL-SC, EL-EC]).
-da_source_layout_port_span(File, Layout, _Port, SourceSpan, _Options) :-
+da_source_layout_port_span(File, Layout, _Port, SourceSpan) :-
     da_source_layout_functor_span(File, Layout, SourceSpan).
 
 
@@ -152,10 +156,10 @@ da_source_stream_offset_line_column(Stream, Offset, Line, Column) :-
     ).
 
 
-%!  da_source_clause_reference(+ClauseRef, -SourceReference, +Options) is det.
+%!  da_source_clause_reference(+ClauseRef, -SourceReference) is det.
 
-:- det(da_source_clause_reference/3).
-da_source_clause_reference(ClauseRef, SourceReference, _Options) :-
+:- det(da_source_clause_reference/2).
+da_source_clause_reference(ClauseRef, SourceReference) :-
     (   da_source_clause_cached_reference(ClauseRef, LastReference)
     ->  succ(LastReference, SourceReference)
     ;   random_between(0, 16777216, SourceReference)

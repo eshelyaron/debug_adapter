@@ -33,6 +33,8 @@ da_clause_source_span(ClauseRef, SourceSpan) :-
     da_clause_source_span(ClauseRef, SourceSpan, []).
 
 
+:- predicate_options(da_clause_source_span/3, 3, [pc(number), pass_to(da_clause_subterm_source_span/4, 4)]).
+
 %!  da_clause_source_span(+ClauseRef, -SourceSpan, +Options) is det.
 
 :- det(da_clause_source_span/3).
@@ -46,13 +48,7 @@ da_clause_source_span(ClauseRef, SourceSpan, Options) :-
     da_clause_subterm_source_span(ClauseRef, [], SourceSpan, Options).
 
 
-%%!  da_clause_pc_call_site_source_span(+ClauseRef, +PC, -SourceSpan) is det.
-%
-%:- det(da_clause_pc_call_site_source_span/3).
-%da_clause_pc_call_site_source_span(ClauseRef, PC, SourceSpan) :-
-%    '$clause_term_position'(ClauseRef, PC, SubTermLayoutPath),
-%    da_clause_port_subterm_source_span(ClauseRef, null, SubTermLayoutPath, SourceSpan).
-
+:- predicate_options(da_clause_subterm_source_span/4, 4, [pass_to(da_source:da_source_subterm_span/5, 5)]).
 
 %!  da_clause_subterm_source_span(+ClauseRef, +SubTermLayoutPath, -SourceSpan, +Options) is det.
 
@@ -98,7 +94,7 @@ da_clause_source_term(ClauseRef, Module, DecompiledClause, VariablesOffset, Sour
 da_clause_source_term(ClauseRef, Module, DecompiledClause, VariablesOffset, SourceClause, reference(SourceReference), SourceLayout, VarNames) :-
     (   da_source_clause_cached_reference(ClauseRef, SourceReference)
     ->  true
-    ;   da_source_clause_reference(ClauseRef, SourceReference, [])
+    ;   da_source_clause_reference(ClauseRef, SourceReference)
     ),
     setup_call_cleanup(new_memory_file(MemFile),
                        ( setup_call_cleanup(open_memory_file(MemFile, write, MemOut),
