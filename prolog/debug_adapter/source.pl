@@ -11,6 +11,7 @@
        ]
    ).
 
+:- use_module(library(lists)).
 :- use_module(library(option)).
 :- use_module(library(prolog_clause)).
 

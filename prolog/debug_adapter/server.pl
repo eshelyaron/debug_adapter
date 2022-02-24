@@ -159,6 +159,9 @@ da_server_handle_debugee_message(DebugeeThreadId,
                                        }),
     succ(Seq0, Seq).
 da_server_handle_debugee_message(_DebugeeThreadId,
+                                 output(_Term, silent, _Lines),
+                                 _Out, Seq, Seq) :- !.
+da_server_handle_debugee_message(_DebugeeThreadId,
                                  output(Term, _Kind, _Lines),
                                  Out, Seq0, Seq) :-
     !,
@@ -460,27 +463,42 @@ da_server_command(Command, RequestSeq, _Message, Out, _W, Seq0, Seq) :-
     dap_error(Out, Seq0, RequestSeq, Command, ErrorMessage),
     succ(Seq0, Seq).
 
+
 dap_source_path(D, path(P)     ) :- _{ path            : P0 } :< D, !, atom_string(P, P0).
 dap_source_path(D, reference(R)) :- _{ sourceReference : R  } :< D.
 
-dap_prolog_source_breakpoint(P, D, source_breakpoint(L, C, null, 0, null)) :-
-    _{ line   : L,
-       column : C0
-     } :< D, !,
-    da_source_file_offsets_line_column_pairs(P, [C], [L-C0]).
-dap_prolog_source_breakpoint(P, D, source_breakpoint(L, C, null, 0, null)) :-
-    _{ line   : L } :< D,
-    da_source_file_offsets_line_column_pairs(P, [C], [L-5]).  % 5 is a "guess" of the indentation. TODO - locate first term in line intelligently
+
+dap_prolog_source_breakpoint(P, D, source_breakpoint(L, C, Cond, Hit, Log)) :-
+    L    = D.get(line     , 0     ),
+    C0   = D.get(column   , 5     ),  % 5 is a "guess" of the indentation.
+    da_source_file_offsets_line_column_pairs(P, [C], [L-C0]),
+    Cond = D.get(condition, "true"),
+    (   get_dict(logMessage, D, Log0)
+    ->  Log = log_message(Log0)
+    ;   Log = null
+    ),
+    (   get_dict(hitCondition, D, Hit0)
+    ->  (   number(Hit0)
+        ->  Hit = Hit0
+        ;   number_string(Hit, Hit0)
+        )
+    ;   Hit = 0
+    ).
 
 
-da_server_capabilities(_{ supportsConfigurationDoneRequest : true,
-                          supportsExceptionInfoRequest     : true,
-                          supportsRestartFrame             : true,
-                          supportsEvaluateForHovers        : true
+da_server_capabilities(_{ supportsConfigurationDoneRequest  : true,
+                          supportsExceptionInfoRequest      : true,
+                          supportsRestartFrame              : true,
+                          supportsEvaluateForHovers         : true,
+                          supportsConditionalBreakpoints    : true,
+                          supportsHitConditionalBreakpoints : true,
+                          supportsLogPoints                 : true
                         }
                       ).
 
+
 da_initialized(_).
+
 
 :- det(da_launch/5).
 da_launch(Args, Out, W, Seq0, Seq) :-
@@ -502,6 +520,7 @@ da_launch(Args, Out, W, Seq0, Seq) :-
                  }),
     succ(Seq0, Seq).
 
+
 da_launch(Args, _Out, W, Seq, Seq) :-
     _{ cwd: CWD, module: ModulePath, goal: GoalString } :< Args,
     !,
@@ -509,6 +528,7 @@ da_launch(Args, _Out, W, Seq, Seq) :-
     term_string(Goal, GoalString),
     thread_self(ServerThreadId),
     thread_create(da_debugee(ModulePath, Goal, ServerThreadId, W), _PrologThreadId).
+
 
 da_configured([debugee(_, ThreadId, _)|T]) :-
     thread_send_message(ThreadId, configuration_done),
