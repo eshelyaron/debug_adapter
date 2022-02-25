@@ -33,7 +33,7 @@ dap_request_response(In, Out, Seq, Command, Arguments, Events, Body) :-
 
 dap_request_response(In, Out, Seq, Command, Arguments, Events, Body, Timeout) :-
     dap_request_response(In, Out, Seq, Command, Arguments, identity, Events, Success, _Message, Body, Timeout),
-    Success = true.
+    Success == true.
 
 dap_request_response(In, Out, Seq, Command, Arguments, Events, Success, Message, Body, Timeout) :-
     dap_request_response(In, Out, Seq, Command, Arguments, identity, Events, Success, Message, Body, Timeout).
@@ -55,13 +55,13 @@ dap_await_response(In, Seq, Command, OnEventGoal, Events, Success, Message, Body
     ;   Timeout is Timeout0 - (Time - Time0),
         dap_read(In, R),
         _{ type : Type} :< R,
-        (   Type = "response"
+        (   Type == "response"
         ->  (   _{ request_seq : Seq, command : Command, success : Success } :< R
             ->  Events = [], Message = R.get(message, null), Body = R.get(body, null),
                 debug(dap(client), "Received response ~w ~w ~w ~w", [Seq, Success, Message, Body])
             ;   dap_await_response(In, Seq, Command, OnEventGoal, Events, Success, Message, Body, Timeout)
             )
-        ;   Type = "event"
+        ;   Type == "event"
         ->  _{ seq : EventSeq0, event : EventType0 } :< R,
             debug(dap(client), "Received event ~w ~w", [EventSeq0, EventType0]),
             EventBody0 = R.get(body, null),

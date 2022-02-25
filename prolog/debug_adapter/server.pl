@@ -329,7 +329,7 @@ da_server_command("launch", RequestSeq, Message, Out, W, Seq0, Seq) :-
     succ(Seq1, Seq).
 da_server_command("configurationDone", RequestSeq, _Message, Out, _W, Seq0, Seq) :-
     !,
-    foreach(da_server_debugee_thread(ThreadId, _), thread_send_message(ThreadId, configuration_done)),
+    forall(da_server_debugee_thread(ThreadId, _), thread_send_message(ThreadId, configuration_done)),
     dap_response(Out, Seq0, RequestSeq, "configurationDone"),
     succ(Seq0, Seq).
 da_server_command("threads", RequestSeq, _Message, Out, _W, Seq0, Seq) :-
@@ -403,7 +403,7 @@ da_server_command("disconnect", RequestSeq, _Message, Out, _W, Seq0, Seq) :-
     !,
     retractall(da_server_disconnecting),
     asserta(da_server_disconnecting),
-    foreach(da_server_debugee_thread(ThreadId, _), thread_send_message(ThreadId, disconnect)),
+    forall(da_server_debugee_thread(ThreadId, _), thread_send_message(ThreadId, disconnect)),
     dap_response(Out, Seq0, RequestSeq, "disconnect"),
     succ(Seq0, Seq).
 da_server_command("restartFrame", RequestSeq, Message, Out, _W, Seq0, Seq) :-
@@ -412,26 +412,25 @@ da_server_command("restartFrame", RequestSeq, Message, Out, _W, Seq0, Seq) :-
     _{ frameId   : FrameId } :< Args,
     dap_response(Out, Seq0, RequestSeq, "restartFrame"),
     succ(Seq0, Seq),
-    foreach(da_server_debugee_thread(ThreadId, _), thread_send_message(ThreadId, restartFrame(FrameId))).
+    forall(da_server_debugee_thread(ThreadId, _), thread_send_message(ThreadId, restartFrame(FrameId))).
 da_server_command("scopes", RequestSeq, Message, _Out, _W, Seq, Seq) :-
     !,
     _{ arguments:Args } :< Message,
     _{ frameId:FrameId } :< Args,
-    foreach(da_server_debugee_thread(ThreadId, _), thread_send_message(ThreadId, scopes(RequestSeq, FrameId))).
+    forall(da_server_debugee_thread(ThreadId, _), thread_send_message(ThreadId, scopes(RequestSeq, FrameId))).
 da_server_command("variables", RequestSeq, Message, _Out, _W, Seq, Seq) :-
     !,
     _{ arguments:Args } :< Message,
     _{ variablesReference:VariablesRef } :< Args,
-    foreach(da_server_debugee_thread(ThreadId, _), thread_send_message(ThreadId, variables(RequestSeq, VariablesRef))).
+    forall(da_server_debugee_thread(ThreadId, _), thread_send_message(ThreadId, variables(RequestSeq, VariablesRef))).
 da_server_command("evaluate", RequestSeq, Message, _Out, _W, Seq, Seq) :-
     !,
     _{ arguments  : Args } :< Message,
     _{ expression : SourceTerm,
        frameId    : FrameId,
-       context    : Context
+       context    : _Context
      } :< Args,
-    debug(dap(tracer), "handling evaluate request arguments with ~w ~w ~w", [FrameId, SourceTerm, Context]),
-    foreach(da_server_debugee_thread(ThreadId, _), thread_send_message(ThreadId, evaluate(RequestSeq, FrameId, SourceTerm))).
+    forall(da_server_debugee_thread(ThreadId, _), thread_send_message(ThreadId, evaluate(RequestSeq, FrameId, SourceTerm))).
 da_server_command("setBreakpoints", RequestSeq, Message, Out, _W, Seq0, Seq) :-
     !,
     _{ arguments : Args } :< Message,
@@ -464,7 +463,7 @@ da_server_command(Command, RequestSeq, _Message, Out, _W, Seq0, Seq) :-
     succ(Seq0, Seq).
 
 
-dap_source_path(D, path(P)     ) :- _{ path            : P0 } :< D, !, atom_string(P, P0).
+dap_source_path(D, path(P)     ) :- _{ path            : P0 } :< D, !, absolute_file_name(P0, P).
 dap_source_path(D, reference(R)) :- _{ sourceReference : R  } :< D.
 
 
