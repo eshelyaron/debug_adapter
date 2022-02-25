@@ -48,8 +48,8 @@ da_breakpoint_action(_BP, _   , _                  , continue).
 :- det(da_breakpoints_set/3).
 da_breakpoints_set(path(Path), Req, Res) :-
     user:ensure_loaded(Path),
-    foreach(da_breakpoint_path(BP, Path),
-            da_breakpoint_delete(BP)),
+    forall(da_breakpoint_path(BP, Path),
+           da_breakpoint_delete(BP)),
     phrase(da_breakpoints_set(Req, path(Path)), Res).
 
 
@@ -71,7 +71,6 @@ da_breakpoint_set(source_breakpoint(L0, C0, Cond, Hit, Log), path(P)) -->
     {   prolog_breakpoints:set_breakpoint(P, L0, C0, BP)   },
     !,
     {   prolog_breakpoints:known_breakpoint(Clause, PC, _, BP),
-        debug(dap(breakpoint), "asserting ~w ~w ~w ~w 0 ~w ~w", [BP, Clause, PC, Cond, Hit, Log]),
         asserta(da_known_breakpoint(BP, Clause, PC, Cond, 0, Hit, Log)),
         prolog_breakpoints:breakpoint_property(BP, character_range(A, L)),
         Z is A + L,

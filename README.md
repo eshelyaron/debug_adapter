@@ -21,14 +21,16 @@ Now run `M-x dap-debug` in a Prolog buffer and have fun.
 
 ## Status
 
-Most of the DAP specification is implemented and operational. For specific features status, see below.
+Most of the DAP specification is implemented and [operational](https://github.com/eshelyaron/debug_adapter/gallery.md).
+For the status of specific features, see below.
 
 Currently only tested with GNU Emacs and `dap-mode` until we have a VS Code extension.
 
 
 ### DAP Events implementation coverage
-`event` messages are notifications sent from the server to the client in
-different situtations.
+`event` messages are notifications sent from the server to the client according to different
+[runtime hooks](https://www.swi-prolog.org/pldoc/man?section=hooks) that are implemented by the
+server.
 
 | Event          | Status |
 |----------------|--------|
@@ -124,6 +126,3 @@ Some of the needed steps towards these goals are:
 - [x] Providing information about variable bindings in each frame
 - [x] Editing and reloading source code during break
 - [ ] ...
-
-## Demo
-![demo](stepIn.gif)

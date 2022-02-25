@@ -110,4 +110,57 @@ test(configurationDone, [ setup(dapipe(SIn, SOut, CIn, COut)),
     thread_join(ServerThreadId, E),
     assertion(E == exited(0)).
 
+test(breakpoint, [ setup(dapipe(SIn, SOut, CIn, COut)),
+                   cleanup(( close(SIn),
+                             close(COut),
+                             close(CIn),
+                             close(SOut),
+                             (   is_thread(ServerThreadId)
+                             ->  thread_signal(ServerThreadId, thread_exit(1))
+                             ;   true
+                             )
+                           )
+                          )
+                 ]
+    ) :-
+    thread_create(da_server([in(SIn), out(SOut)]), ServerThreadId, []),
+    dap_request_response(CIn, COut, 1, "initialize", null, Body),
+    _{ supportsConfigurationDoneRequest : true } :< Body,
+    source_file(user:da_server_test_marker_predicate, ThisFile),
+    file_directory_name(ThisFile, CWD),
+    dap_request_response(CIn, COut, 2, "launch", _{ cwd    : CWD,
+                                                    module : "./target/breakpoint.pl",
+                                                    goal   : bp
+                                                  }, [event(_, "initialized", _)|_],
+                         _Body),
+    debug(dap(test), "here", []),
+    dap_request_response(CIn, COut, 3, "setBreakpoints",
+                         _{ breakpoints    : [_{line : 8}],
+                            lines          : [8],
+                            source         : _{ name : "breakpoint.pl",
+                                                path : "./target/breakpoint.pl"
+                                              },
+                            sourceModified : false
+                          },
+                         _Events,
+                         BPBody),
+    assertion(BPBody = _{ breakpoints : [ _{ column    : 4,
+                                             endColumn : 17,
+                                             endLine   : 8,
+                                             id        : 1,
+                                             line      : 8,
+                                             message   : null,
+                                             source    : _{ name   : "breakpoint.pl",
+                                                            origin : "Static",
+                                                            path   : _Path
+                                                          },
+                                             verified  : true
+                                           }
+                                        ]
+                        }),
+    dap_request_response(CIn, COut, 4, "configurationDone"),
+    dap_request_response(CIn, COut, 5, "disconnect"),
+    thread_join(ServerThreadId, E),
+    assertion(E == exited(0)).
+
 :- end_tests(server).
