@@ -7,7 +7,9 @@
 
 
 :- predicate_options(da_server/1, 1, [ in(+stream),
-                                       out(+stream)
+                                       out(+stream),
+                                       interrupt(+pair),
+                                       threads(+list(pair))
                                      ]
                     ).
 
@@ -30,9 +32,14 @@ specification](https://microsoft.github.io/debug-adapter-protocol/specification)
 %
 %   Starts the DAP server in the current thread. Options:
 %    - in(+Stream)
-%      Required. Stream will be used by the server to read incoming messages from the client.
+%      Stream will be used by the server to read incoming messages from the client. Defaults to user_input.
 %    - out(+Stream)
-%      Required. Stream will be used by the server to emit outgoing messages to the client.
+%      Stream will be used by the server to emit outgoing messages to the client. Defaults to user_output.
+%    - interrupt(+RW)
+%      Internal. Used by da_trace_interception/4 to bootstrap a DAP server from a debuggee thread.
+%    - threads(+Threads)
+%      List of initial debuggee threads to be monitored by the server.
+
 
 :- det(da_server/1).
 da_server(Options) :-
@@ -40,16 +47,21 @@ da_server(Options) :-
     option(out(Out), Options, user_output),
     set_stream(In, buffer(full)),
     set_stream(In, encoding(octet)),
-    set_stream(In, newline(dos)),
+    set_stream(In, newline(detect)),
     set_stream(In, representation_errors(error)),
     set_stream(In, tty(false)),
     set_stream(Out, buffer(false)),
     set_stream(Out, encoding(octet)),
     set_stream(Out, tty(false)),
-    pipe(R, W),
+    (   option(interrupt(R-W), Options)
+    ->  true
+    ;   pipe(R, W)
+    ),
     set_stream(R, buffer(full)),
     set_stream(R, encoding(octet)),
     set_stream(W, buffer(false)),
+    option(threads(Threads), Options, []),
+    forall(member(T-S, Threads), asserta(da_server_debugee_thread(T, S))),
     da_server_loop(1, In, Out, R, W).
 
 :- thread_local da_server_debugee_thread/2.
@@ -89,9 +101,9 @@ da_server_handle_stream(In, _R, In, Out, W, Seq0, Seq) :-
     dap_read(In, Message0),
     del_dict(seq,  Message0, ClientSeq, Message1),
     del_dict(type, Message1, Type, Message),
-    debug(dap(server), "Received message ~w from stdin", [Message]),
+    debug(dap(server), "Received message ~w from client", [Message]),
     da_server_handle_message(Type, ClientSeq, Message, Out, W, Seq0, Seq),
-    debug(dap(server), "Handled message ~w from stdin", [Message]).
+    debug(dap(server), "Handled message ~w from client", [Message]).
 da_server_handle_stream(_In, R, R, Out, _, Seq0, Seq) :-
     !,
     get_code(R, _),
@@ -332,6 +344,12 @@ da_server_command("launch", RequestSeq, Message, Out, W, Seq0, Seq) :-
     da_launch(Args, Out, W, Seq0, Seq1),
     dap_response(Out, Seq1, RequestSeq, "launch"),
     succ(Seq1, Seq).
+da_server_command("attach", RequestSeq, Message, Out, W, Seq0, Seq) :-
+    !,
+    _{ arguments:Args } :< Message,
+    da_attach(Args, Out, W, Seq0, Seq1),
+    dap_response(Out, Seq1, RequestSeq, "attach"),
+    succ(Seq1, Seq).
 da_server_command("configurationDone", RequestSeq, _Message, Out, _W, Seq0, Seq) :-
     !,
     forall(da_server_debugee_thread(ThreadId, _), thread_send_message(ThreadId, configuration_done)),
@@ -523,8 +541,6 @@ da_launch(Args, Out, W, Seq0, Seq) :-
                      args  : ["telnet",  "127.0.0.1", PortString]
                  }),
     succ(Seq0, Seq).
-
-
 da_launch(Args, _Out, W, Seq, Seq) :-
     _{ cwd: CWD, module: ModulePath, goal: GoalString } :< Args,
     !,
@@ -532,6 +548,9 @@ da_launch(Args, _Out, W, Seq, Seq) :-
     term_string(Goal, GoalString),
     thread_self(ServerThreadId),
     thread_create(da_debugee(ModulePath, Goal, ServerThreadId, W), _PrologThreadId).
+
+
+da_attach(_Args, _Out, _W, Seq, Seq).
 
 
 da_configured([debugee(_, ThreadId, _)|T]) :-

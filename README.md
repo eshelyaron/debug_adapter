@@ -21,7 +21,7 @@ Now run `M-x dap-debug` in a Prolog buffer and have fun.
 
 ## Status
 
-Most of the DAP specification is implemented and [operational](https://github.com/eshelyaron/debug_adapter/gallery.md).
+Most of the DAP specification is implemented and [operational](https://github.com/eshelyaron/debug_adapter/blob/main/gallery.md).
 For the status of specific features, see below.
 
 Currently only tested with GNU Emacs and `dap-mode` until we have a VS Code extension.
