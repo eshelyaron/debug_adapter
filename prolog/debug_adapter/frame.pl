@@ -15,6 +15,7 @@
            da_frame_port_source_span/3,
            da_frame_scopes/4,
            da_frame_evaluate/4,
+           da_frame_variables_mapping/2,
            da_referenced_variables/2
        ]
    ).
@@ -432,3 +433,13 @@ da_frame_unify_variables( FrameId,  ClauseVarNames, [VarName=Value|T]) :- !,
     ;   true
     ),
     da_frame_unify_variables(FrameId, ClauseVarNames, T).
+
+
+da_frame_variables_mapping(FrameId, Map) :-
+    da_frame_clause(FrameId, ClauseRef),
+    da_clause_variable_names(ClauseRef, ClauseVarNames),
+    findall(Name=Value,
+            (   arg(I, ClauseVarNames, Name),
+                prolog_frame_attribute(FrameId, argument(I), Value)
+            ),
+            Map).

@@ -13,7 +13,9 @@
 
 :- multifile prolog:message//1.
 
-prolog:message(log_message(BP, String)) -->
+prolog:message(log_message(BP, Map, String0)) -->
+    { interpolate_string(String0, String, Map, []) },
+    !,
     [ 'Log point ~w: ~w'-[BP, String] ].
 
 
@@ -31,18 +33,20 @@ da_break_hook(BP, Clause, PC, FR, _BFR, _Expression, Cond, Hit, Hit, Log, Action
     retractall(da_known_breakpoint(BP, _, _, _, _, _, _)),
     asserta(da_known_breakpoint(BP, Clause, PC, Cond, 0, Hit, Log)),
     da_frame_evaluate(FR, Cond, Result, _),
-    da_breakpoint_action(BP, Result, Log, Action).
+    da_breakpoint_action(BP, FR, Result, Log, Action).
 da_break_hook(BP, Clause, PC, _FR, _BFR, _Expression, Cond, Hit0, Hit, Log, continue) :-
     retractall(da_known_breakpoint(BP, _, _, _, _, _, _)),
     Hit1 is Hit0 + 1,
     asserta(da_known_breakpoint(BP, Clause, PC, Cond, Hit1, Hit, Log)).
 
 
-:- det(da_breakpoint_action/4).
-da_breakpoint_action(_BP, true, null               , trace   ) :- !.
-da_breakpoint_action(_BP, _   , null               , continue) :- !.
-da_breakpoint_action( BP, true, log_message(String), continue) :- !, print_message(trace, log_message(BP, String)).
-da_breakpoint_action(_BP, _   , _                  , continue).
+:- det(da_breakpoint_action/5).
+da_breakpoint_action(_BP, _FR, true, null               , trace   ) :- !.
+da_breakpoint_action(_BP, _FR, _   , null               , continue) :- !.
+da_breakpoint_action( BP,  FR, true, log_message(String), continue) :- !,
+    da_frame_variables_mapping(FR, Map),
+    print_message(trace, log_message(BP, Map, String)).
+da_breakpoint_action(_BP, _FR, _   , _                  , continue).
 
 
 :- det(da_breakpoints_set/3).
