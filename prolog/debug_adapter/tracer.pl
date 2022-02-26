@@ -16,6 +16,7 @@ tracer which is attached to each DAP debugged thread.
 :- use_module(stack).
 :- use_module(frame).
 :- use_module(source, [qualified/3]).
+:- use_module(server, [da_server/1]).
 
 user:prolog_trace_interception(Port, Frame, Choice, Action) :-
     notrace(da_trace_interception(Port, Frame, Choice, Action)),
@@ -130,15 +131,66 @@ da_debugee_exited(R, S, W) :-
     da_debugee_emitted_message(thread_exited, S, W),
     da_debugee_emitted_message(exited(R), S, W).
 
-:- det(da_trace_interception/4).
+
+%! user:debugger_connection_template(-Template) is nondet.
+%
+%  Mutlifile, dynamic predicate. Initially undefined.
+%
+%  When defined by the user, Template must be unified with a string that
+%  will be interpolated with `format(string(Command), Template, [TCPPort])`
+%  to produce a shell command _Command_ that starts a DAP client and
+%  connects to the DAP server via TCP port _TCPPort_.
+%
+%  This hook is used to start a user specified DAP client when
+%  intercepting the tracer for a thread that does not partake in a
+%  preexisting DAP session.
+%
+%  For example, using GNU Emacs with `dap-mode`:
+%  ```
+%  ?- [library(debug_adapter/tracer)].
+%  true.
+%
+%  ?- asserta(user:debugger_connection_template("emacs --eval '(dap-debug (list :type \"swi-prolog-tcp\" :debugServer ~w))' &")).
+%  true.
+%
+%  ?- ['foo.pl']     % assuming foo.pl contains a definition of foo/0
+%  true.
+%
+%  ?- trace, foo.  % Emacs pops up showing foo.pl with dap-mode connected to the current thread
+%  ```
+
+:- multifile user:debugger_connection_template/1.
+:- dynamic user:debugger_connection_template/1.
+
 da_trace_interception(Port, Frame, Choice, Action) :-
     da_debugee_server(ServerThreadId, ServerInterruptHandle),
+    !,
     da_tracer_last_action(LastAction),
+    !,
     retractall(da_tracer_last_action(_)),
     da_tracer_stopped_reason(Port, LastAction, Reason, Description, Text, BreakpointIds),
     da_debugee_emitted_message(stopped(Reason, Description, Text, BreakpointIds), ServerThreadId, ServerInterruptHandle),
     da_tracer_loop(Port, Frame, Choice, Action, ServerThreadId, ServerInterruptHandle).
+da_trace_interception(Port, Frame, Choice, Action) :-
+    user:debugger_connection_template(Template),
+    !,
+    pipe(R, W),
+    tcp_socket(ServerSocket),
+    tcp_setopt(ServerSocket, reuseaddr),
+    tcp_bind(ServerSocket, TCPPort),
+    format(string(Command), Template, [TCPPort]),
+    tcp_listen(ServerSocket, 5),
+    shell(Command),
+    tcp_accept(ServerSocket, ClientSocket, _Peer),
+    tcp_open_socket(ClientSocket, InStream, OutStream),
+    thread_self(Self0),
+    thread_property(Self0, id(Self)),
+    thread_create(da_server([threads([Self-running]), in(InStream), out(OutStream), interrupt(R-W)]), ServerThreadId),
+    da_tracer_setup(ServerThreadId, W),
+    da_debugee_emitted_message(stopped("entry", null, null, null), ServerThreadId, W),
+    da_tracer_loop(Port, Frame, Choice, Action, ServerThreadId, W).
 
+:- det(da_tracer_loop/6).
 da_tracer_loop(Port, Frame, Choice, Action, ServerThreadId, ServerInterruptHandle) :-
     thread_get_message(Message),
     da_tracer_handled_message(Message, Port, Frame, Choice, Action0, ServerThreadId, ServerInterruptHandle),
