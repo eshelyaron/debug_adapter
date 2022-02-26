@@ -59,7 +59,7 @@ information about the current runtime.
 
 | Request                   | Status |
 |---------------------------|--------|
-| Attach                    |        |
+| Attach                    | ✅      |
 | BreakpointLocations       |        |
 | Completions               |        |
 | ConfigurationDone         | ✅      |
