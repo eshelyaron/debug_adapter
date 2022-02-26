@@ -143,9 +143,7 @@ da_server_handle_debugee_message(DebugeeThreadId,
              ),
     succ(Seq0, Seq),
     (   da_server_disconnecting
-    ->  catch(thread_send_message(DebugeeThreadId, disconnect),
-              error(existence_error(thread, DebugeeThreadId), _),
-              true)
+    ->  safe_thread_send_message(DebugeeThreadId, disconnect)
     ;   true
     ).
 da_server_handle_debugee_message(DebugeeThreadId,
@@ -228,11 +226,18 @@ da_server_handle_debugee_message(DebugeeThreadId,
     succ(Seq0, Seq),
     asserta(da_server_debugee_thread(DebugeeThreadId, running)),
     (   da_server_disconnecting
-    ->  catch(thread_send_message(DebugeeThreadId, disconnect),
-              error(existence_error(thread, DebugeeThreadId), _),
-              true)
+    ->  safe_thread_send_message(DebugeeThreadId, disconnect)
     ;   true
     ).
+
+
+safe_thread_send_message(ThreadId, disconnect) :-
+    catch(thread_send_message(ThreadId, disconnect), Catcher, true),
+    expected_error(ThreadId, Catcher).
+
+
+expected_error(ThreadId, error(existence_error(thread, ThreadId), _)) :- !.
+expected_error(ThreadId, error(type_error(thread, ThreadId), _)).
 
 
 prolog_dap_scope(scope(Name, VariablesRef, SourceSpan),
