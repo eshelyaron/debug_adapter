@@ -466,6 +466,18 @@ da_server_command("setBreakpoints", RequestSeq, Message, Out, _W, Seq0, Seq) :-
     maplist(prolog_dap_breakpoint, ResBreakpoints, DAPBreakpoints),
     dap_response(Out, Seq0, RequestSeq, "setBreakpoints", _{breakpoints:DAPBreakpoints}),
     succ(Seq0, Seq).
+da_server_command("setExceptionBreakpoints", RequestSeq, Message, Out, _W, Seq0, Seq) :-
+    !,
+    _{ arguments : Args    } :< Message,
+    _{ filters   : Filters } :< Args,
+    (   Filters == []
+    ->  retractall(da_tracer:da_tracer_trapping),
+        dap_response(Out, Seq0, RequestSeq, "setExceptionBreakpoints", _{breakpoints:[]})
+    ;   Filters = ["true"|_]
+    ->  asserta(da_tracer:da_tracer_trapping),
+        dap_response(Out, Seq0, RequestSeq, "setExceptionBreakpoints", _{breakpoints:[_{verified:true}]})
+    ),
+    succ(Seq0, Seq).
 da_server_command("source", RequestSeq, Message, Out, _W, Seq0, Seq) :-
     !,
     _{ arguments : Args } :< Message,
@@ -514,7 +526,8 @@ da_server_capabilities(_{ supportsConfigurationDoneRequest  : true,
                           supportsEvaluateForHovers         : true,
                           supportsConditionalBreakpoints    : true,
                           supportsHitConditionalBreakpoints : true,
-                          supportsLogPoints                 : true
+                          supportsLogPoints                 : true,
+                          exceptionBreakpointFilters        : [ _{ filter : "true" , label : "Trap exceptions", default: true } ]
                         }
                       ).
 

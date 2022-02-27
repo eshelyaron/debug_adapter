@@ -84,7 +84,7 @@ information about the current runtime.
 | Scopes                    | ✅      |
 | SetBreakpoints            | ✅      |
 | SetDataBreakpoints        |        |
-| SetExceptionBreakpoints   |        |
+| SetExceptionBreakpoints   | ✅      |
 | SetExpression             |        |
 | SetFunctionBreakpoints    |        |
 | SetInstructionBreakpoints |        |
