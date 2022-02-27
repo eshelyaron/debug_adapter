@@ -2,7 +2,8 @@
        da_tracer,
        [
            da_debugee/4,
-           da_terminal/3
+           da_terminal/3,
+           da_tracer_trapping/0
        ]
    ).
 
@@ -96,10 +97,20 @@ da_tracer_setup(ServerThreadId, ServerInterruptHandle) :-
                                             ServerThreadId,
                                             ServerInterruptHandle),
                  false)),
+    asserta((user:prolog_exception_hook(Ex, Out, Frame, Catcher) :-
+                 da_exception_hook(Ex, Out, Frame, Catcher))),
     set_prolog_flag(gui_tracer, true),
     visible(+all),
     prolog_skip_level(_, very_deep).
 
+:- dynamic da_tracer_trapping/0.
+
+da_exception_hook(_In, _Out, _Frame, _Catcher) :-
+    thread_self(Me),
+    thread_property(Me, debug(true)),
+    da_tracer_trapping,
+    trace,
+    fail.
 
 da_terminal(ServerSocket, ServerThreadId, ServerInterruptHandle) :-
     da_debugee_emitted_message(thread_started, ServerThreadId, ServerInterruptHandle),
@@ -211,8 +222,8 @@ da_tracer_stopped_reason(_, step_in, "step in", null, null, null) :- !.
 da_tracer_stopped_reason(_, step_out, "step out", null, null, null) :- !.
 da_tracer_stopped_reason(_, next   , "step over", null, null, null) :- !.
 da_tracer_stopped_reason(_, restart_frame, "restart", null, null, null) :- !.
-da_tracer_stopped_reason(_, continue, "breakpoint", null, null, null) :- !.
 da_tracer_stopped_reason(_, pause,    "pause",      null, null, null) :- !.
+da_tracer_stopped_reason(_, _, "breakpoint", null, null, null) :- !.
 
 
 :- det(prolog_dap_stopped_reason/5).
