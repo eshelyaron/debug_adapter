@@ -8,7 +8,11 @@
            dap_request_response/7,
            dap_request_response/8,
            dap_request_response/10,
-           dap_request_response/11
+           dap_request_response/11,
+           dap_await_event/2,
+           dap_await_event/3,
+           dap_await_event/4,
+           dap_await_event/6
        ]
    ).
 
@@ -32,11 +36,11 @@ dap_request_response(In, Out, Seq, Command, Arguments, Events, Body) :-
     dap_request_response(In, Out, Seq, Command, Arguments, Events, Body, Timeout).
 
 dap_request_response(In, Out, Seq, Command, Arguments, Events, Body, Timeout) :-
-    dap_request_response(In, Out, Seq, Command, Arguments, identity, Events, Success, _Message, Body, Timeout),
+    dap_request_response(In, Out, Seq, Command, Arguments, return, Events, Success, _Message, Body, Timeout),
     Success == true.
 
 dap_request_response(In, Out, Seq, Command, Arguments, Events, Success, Message, Body, Timeout) :-
-    dap_request_response(In, Out, Seq, Command, Arguments, identity, Events, Success, Message, Body, Timeout).
+    dap_request_response(In, Out, Seq, Command, Arguments, return, Events, Success, Message, Body, Timeout).
 
 :- meta_predicate dap_request_response(?, ?, ?, ?, ?, 2, ?, ?, ?, ?, ?).
 
@@ -71,4 +75,40 @@ dap_await_response(In, Seq, Command, OnEventGoal, Events, Success, Message, Body
         )
     ).
 
-identity(E, [E]).
+
+dap_await_event(In, EventType) :-
+    dap_await_event(In, EventType, _).
+
+dap_await_event(In, EventType, EventBody) :-
+    dap_await_event(In, EventType, EventBody, 5).
+
+dap_await_event(In, EventType, EventBody, Timeout) :-
+    dap_await_event(In, =(event(_, EventType, EventBody)), _, _, true, Timeout).
+
+dap_await_event(In, OnEventGoal, Events, Responses, Success, Timeout0) :-
+    debug(dap(client), "Awaiting event for another ~w seconds", [Timeout0]),
+    get_time(Time0),
+    wait_for_input([In], ReadyList, Timeout0),
+    get_time(Time),
+    (   ReadyList = []  % timeout occured
+    ->  Success = timeout
+    ;   Timeout is Timeout0 - (Time - Time0),
+        dap_read(In, R),
+        _{ type : Type} :< R,
+        (   Type == "response"
+        ->  debug(dap(client), "Received response", []),
+            Responses = [R|Responses1],
+            dap_await_event(In, OnEventGoal, Events, Responses1, Success, Timeout)
+        ;   Type == "event"
+        ->  debug(dap(client), "Received event ~w ~w", [EventSeq0, EventType0]),
+            _{ seq : EventSeq0, event : EventType0 } :< R,
+            EventBody0 = R.get(body, null),
+            (   call(OnEventGoal, event(EventSeq0, EventType0, EventBody0))
+            ->  Success = true
+            ;   Events = [R|Events1],
+                dap_await_event(In, OnEventGoal, Events1, Responses, Success, Timeout)
+            )
+        )
+    ).
+
+return(E, [E]).
