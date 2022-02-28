@@ -80,7 +80,7 @@ dap_await_event(In, EventType) :-
     dap_await_event(In, EventType, _).
 
 dap_await_event(In, EventType, EventBody) :-
-    dap_await_event(In, EventType, EventBody, 5).
+    dap_await_event(In, EventType, EventBody, 10).
 
 dap_await_event(In, EventType, EventBody, Timeout) :-
     dap_await_event(In, =(event(_, EventType, EventBody)), _, _, true, Timeout).
