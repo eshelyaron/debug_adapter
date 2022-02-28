@@ -195,12 +195,9 @@ test(functionBreakpoint, [ setup(dapipe(SIn, SOut, CIn, COut)),
     dap_request_response(CIn, COut, 5, "threads", null, Threads),
     Threads = _{threads:[_{id:Id, name:_Name}]},
     dap_request_response(CIn, COut, 5, "continue", _{threadId: Id}, Events0, _Body0),
-    debug(dap(test), "got events0 ~w", [Events0]),
-    sleep(1),  % wait for debugee thread to setup
+    sleep(1),  % wait for another second to gather events
     dap_request_response(CIn, COut, 6, "threads", null, Events1, _Body1),
-    debug(dap(test), "got events1 ~w", [Events1]),
     append(Events0, Events1, Events),
-    debug(dap(test), "got events ~w", [Events]),
     assertion(member(event(_, "continued", _{allThreadsContinued:_,threadId:Id}), Events)),
     assertion(member(event(_, "stopped",   _{description:_,hitBreakpointIds:_,reason:"breakpoint",text:_,threadId:Id}), Events)),
     dap_request_response(CIn, COut, 7, "disconnect"),
