@@ -225,6 +225,7 @@ da_tracer_stopped_reason(_P          , _F, breakpoint(B), "breakpoint"         ,
 da_tracer_stopped_reason(call        ,  F, _L           , "function breakpoint", null, null, null) :-
     prolog_frame_attribute(F, predicate_indicator, PI),
     da_breakpoint:da_known_function_breakpoint(PI), !.
+da_tracer_stopped_reason(_P          , _F, _L           , "trace"              , null, null, null).  % debugee voluntarily started the tracer
 
 
 :- det(prolog_dap_stopped_reason/5).

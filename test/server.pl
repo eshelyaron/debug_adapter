@@ -201,4 +201,38 @@ test(functionBreakpoint, [ setup(dapipe(SIn, SOut, CIn, COut)),
     thread_join(ServerThreadId, E),
     assertion(E == exited(0)).
 
+test(voluntarilyTrace, [ setup(dapipe(SIn, SOut, CIn, COut)),
+                         cleanup(( close(SIn),
+                                   close(COut),
+                                   close(CIn),
+                                   close(SOut),
+                                   (   is_thread(ServerThreadId)
+                                   ->  thread_signal(ServerThreadId, thread_exit(1))
+                                   ;   true
+                                   )
+                                 )
+                                )
+                       ]
+    ) :-
+    thread_create(da_server([in(SIn), out(SOut)]), ServerThreadId, []),
+    dap_request_response(CIn, COut, 1, "initialize", null, Body),
+    _{ supportsConfigurationDoneRequest : true } :< Body,
+    source_file(user:da_server_test_marker_predicate, ThisFile),
+    file_directory_name(ThisFile, CWD),
+    dap_request_response(CIn, COut, 2, "launch", _{ cwd    : CWD,
+                                                    module : "./target/trace.pl",
+                                                    goal   : doit
+                                                  }, [event(_, "initialized", _)|_],
+                         _Body),
+    dap_request_response(CIn, COut, 4, "configurationDone"),
+    dap_await_event(CIn, "stopped", StoppedBody0),
+    StoppedBody0 = _{description:_, hitBreakpointIds:_, reason:"entry", text:_, threadId:Id},
+    dap_request_response(CIn, COut, 5, "continue", _{threadId: Id}, Events0, _Body0),
+    dap_await_event(CIn, "continued"),
+    dap_await_event(CIn, "stopped", StoppedBody),
+    assertion(StoppedBody = _{description:_, hitBreakpointIds:_, reason:"trace", text:_, threadId:Id}),
+    dap_request_response(CIn, COut, 6, "disconnect"),
+    thread_join(ServerThreadId, E),
+    assertion(E == exited(0)).
+
 :- end_tests(server).
