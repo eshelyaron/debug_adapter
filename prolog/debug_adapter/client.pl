@@ -83,6 +83,7 @@ dap_await_event(In, EventType, EventBody) :-
     dap_await_event(In, EventType, EventBody, 10).
 
 dap_await_event(In, EventType, EventBody, Timeout) :-
+    debug(dap(client), "Awaiting event of type ~w", [EventType]),
     dap_await_event(In, =(event(_, EventType, EventBody)), _, _, true, Timeout).
 
 :- det(dap_await_event/6).
