@@ -232,6 +232,10 @@ da_server_handle_debugee_message(DebugeeThreadId,
                                  thread_started,
                                  Out, Seq0, Seq) :-
     !,
+    (   da_server_configured
+    ->  thread_send_message(DebugeeThreadId, configuration_done)
+    ;   true
+    ),
     dap_event(Out, Seq0, "thread", _{ reason   : "started",
                                       threadId : DebugeeThreadId
                                     }),
@@ -329,6 +333,9 @@ prolog_dap_in_frame_label(pc(PC), DAPLabel) :-
     number_string(PC, DAPLabel).
 
 
+:- dynamic da_server_configured/0.
+
+:- det(da_server_command/7).
 da_server_command("initialize", RequestSeq, Message, Out, _W, Seq0, Seq) :-
     !,
     _{ arguments:Args } :< Message,
@@ -353,6 +360,7 @@ da_server_command("attach", RequestSeq, Message, Out, W, Seq0, Seq) :-
 da_server_command("configurationDone", RequestSeq, _Message, Out, _W, Seq0, Seq) :-
     !,
     forall(da_server_debugee_thread(ThreadId, _), thread_send_message(ThreadId, configuration_done)),
+    asserta(da_server_configured),
     dap_response(Out, Seq0, RequestSeq, "configurationDone"),
     succ(Seq0, Seq).
 da_server_command("threads", RequestSeq, _Message, Out, _W, Seq0, Seq) :-
@@ -586,9 +594,3 @@ da_launch(Args, _Out, W, Seq, Seq) :-
 
 
 da_attach(_Args, _Out, _W, Seq, Seq).
-
-
-da_configured([debugee(_, ThreadId, _)|T]) :-
-    thread_send_message(ThreadId, configuration_done),
-    da_configured(T).
-da_configured([]).
