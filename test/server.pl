@@ -191,7 +191,7 @@ test(functionBreakpoint, [ setup(dapipe(SIn, SOut, CIn, COut)),
                          BPBody),
     assertion(BPBody = _{ breakpoints : [ _{ verified  : true } ] }),
     dap_request_response(CIn, COut, 4, "configurationDone"),
-    sleep(1),  % wait for debugee thread to setup
+    sleep(2),  % wait for debugee thread to setup
     dap_request_response(CIn, COut, 5, "threads", null, Threads),
     Threads = _{threads:[_{id:Id, name:_Name}]},
     dap_request_response(CIn, COut, 5, "continue", _{threadId: Id}, Events0, _Body0),
