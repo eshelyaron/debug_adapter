@@ -179,7 +179,7 @@ da_trace_interception(Port, Frame, Choice, Action) :-
     da_tracer_last_action(LastAction),
     !,
     retractall(da_tracer_last_action(_)),
-    da_tracer_stopped_reason(Port, LastAction, Reason, Description, Text, BreakpointIds),
+    da_tracer_stopped_reason(Port, Frame, LastAction, Reason, Description, Text, BreakpointIds),
     da_debugee_emitted_message(stopped(Reason, Description, Text, BreakpointIds), ServerThreadId, ServerInterruptHandle),
     da_tracer_loop(Port, Frame, Choice, Action, ServerThreadId, ServerInterruptHandle).
 da_trace_interception(Port, Frame, Choice, Action) :-
@@ -211,19 +211,20 @@ da_tracer_loop(Port, Frame, Choice, Action, ServerThreadId, ServerInterruptHandl
     ).
 
 
-%!  da_tracer_stopped_reason(+Port, +LastAction, -Reason, -Description, -Text, -BreakpointIds) is det.
+%!  da_tracer_stopped_reason(+Port, +Frame, +LastAction, -Reason, -Description, -Text, -BreakpointIds) is det.
 
-:- det(da_tracer_stopped_reason/6).
-da_tracer_stopped_reason(exception(Exception), _, "exception", Description, null, null) :-
-    !,
-    term_string(Exception, Description).
-da_tracer_stopped_reason(call, null, "entry", null, null, null) :- !.
-da_tracer_stopped_reason(_, step_in, "step in", null, null, null) :- !.
-da_tracer_stopped_reason(_, step_out, "step out", null, null, null) :- !.
-da_tracer_stopped_reason(_, next   , "step over", null, null, null) :- !.
-da_tracer_stopped_reason(_, restart_frame, "restart", null, null, null) :- !.
-da_tracer_stopped_reason(_, pause,    "pause",      null, null, null) :- !.
-da_tracer_stopped_reason(_, _, "breakpoint", null, null, null) :- !.
+:- det(da_tracer_stopped_reason/7).
+da_tracer_stopped_reason(exception(E), _F, _L           , "exception"          , D   , null, null) :- !, term_string(E, D).
+da_tracer_stopped_reason(call        , _F, null         , "entry"              , null, null, null) :- !.
+da_tracer_stopped_reason(_P          , _F, step_in      , "step"               , null, null, null) :- !.
+da_tracer_stopped_reason(_P          , _F, step_out     , "step"               , null, null, null) :- !.
+da_tracer_stopped_reason(_P          , _F, next         , "step"               , null, null, null) :- !.
+da_tracer_stopped_reason(_P          , _F, restart_frame, "restart"            , null, null, null) :- !.
+da_tracer_stopped_reason(_P          , _F, pause        , "pause"              , null, null, null) :- !.
+da_tracer_stopped_reason(_P          , _F, breakpoint(B), "breakpoint"         , null, null, [B] ) :- !.
+da_tracer_stopped_reason(call        ,  F, _L           , "function breakpoint", null, null, null) :-
+    prolog_frame_attribute(F, predicate_indicator, PI),
+    da_breakpoint:da_known_function_breakpoint(PI), !.
 
 
 :- det(prolog_dap_stopped_reason/5).

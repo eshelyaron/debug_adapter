@@ -199,7 +199,7 @@ test(functionBreakpoint, [ setup(dapipe(SIn, SOut, CIn, COut)),
     dap_request_response(CIn, COut, 6, "threads", null, Events1, _Body1),
     append(Events0, Events1, Events),
     assertion(member(event(_, "continued", _{allThreadsContinued:_,threadId:Id}), Events)),
-    assertion(member(event(_, "stopped",   _{description:_,hitBreakpointIds:_,reason:"breakpoint",text:_,threadId:Id}), Events)),
+    assertion(member(event(_, "stopped",   _{description:_,hitBreakpointIds:_,reason:"function breakpoint",text:_,threadId:Id}), Events)),
     dap_request_response(CIn, COut, 7, "disconnect"),
     thread_join(ServerThreadId, E),
     assertion(E == exited(0)).

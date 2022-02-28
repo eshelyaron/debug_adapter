@@ -20,6 +20,7 @@ prolog:message(log_message(BP, Map, String0)) -->
 
 
 :- dynamic da_known_breakpoint/7.
+:- dynamic da_known_function_breakpoint/1.
 
 
 prolog:break_hook(Clause, PC, FR, BFR, Expression, Action) :-
@@ -41,7 +42,9 @@ da_break_hook(BP, Clause, PC, _FR, _BFR, _Expression, Cond, Hit0, Hit, Log, cont
 
 
 :- det(da_breakpoint_action/5).
-da_breakpoint_action(_BP, _FR, true, null               , trace   ) :- !.
+da_breakpoint_action( BP, _FR, true, null               , trace   ) :- !,
+    retractall(da_tracer:da_tracer_last_action(_)),
+    asserta(da_tracer:da_tracer_last_action(breakpoint(BP))).
 da_breakpoint_action(_BP, _FR, _   , null               , continue) :- !.
 da_breakpoint_action( BP,  FR, true, log_message(String), continue) :- !,
     da_frame_variables_mapping(FR, Map),
