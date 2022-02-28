@@ -85,6 +85,7 @@ dap_await_event(In, EventType, EventBody) :-
 dap_await_event(In, EventType, EventBody, Timeout) :-
     dap_await_event(In, =(event(_, EventType, EventBody)), _, _, true, Timeout).
 
+:- det(dap_await_event/6).
 dap_await_event(In, OnEventGoal, Events, Responses, Success, Timeout0) :-
     debug(dap(client), "Awaiting event for another ~w seconds", [Timeout0]),
     get_time(Time0),
@@ -100,8 +101,8 @@ dap_await_event(In, OnEventGoal, Events, Responses, Success, Timeout0) :-
             Responses = [R|Responses1],
             dap_await_event(In, OnEventGoal, Events, Responses1, Success, Timeout)
         ;   Type == "event"
-        ->  debug(dap(client), "Received event ~w ~w", [EventSeq0, EventType0]),
-            _{ seq : EventSeq0, event : EventType0 } :< R,
+        ->  _{ seq : EventSeq0, event : EventType0 } :< R,
+            debug(dap(client), "Received event ~w ~w", [EventSeq0, EventType0]),
             EventBody0 = R.get(body, null),
             (   call(OnEventGoal, event(EventSeq0, EventType0, EventBody0))
             ->  Success = true
