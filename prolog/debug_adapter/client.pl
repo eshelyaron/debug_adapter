@@ -80,9 +80,10 @@ dap_await_event(In, EventType) :-
     dap_await_event(In, EventType, _).
 
 dap_await_event(In, EventType, EventBody) :-
-    dap_await_event(In, EventType, EventBody, 5).
+    dap_await_event(In, EventType, EventBody, 10).
 
 dap_await_event(In, EventType, EventBody, Timeout) :-
+    debug(dap(client), "Awaiting event of type ~w", [EventType]),
     dap_await_event(In, =(event(_, EventType, EventBody)), _, _, true, Timeout).
 
 :- det(dap_await_event/6).
@@ -91,9 +92,16 @@ dap_await_event(In, OnEventGoal, Events, Responses, Success, Timeout0) :-
     get_time(Time0),
     wait_for_input([In], ReadyList, Timeout0),
     get_time(Time),
+    Timeout is Timeout0 - (Time - Time0),
     (   ReadyList = []  % timeout occured
-    ->  Success = timeout
-    ;   Timeout is Timeout0 - (Time - Time0),
+    ->  debug(dap(client), "Nothing to read from", []),
+        (   Timeout =< 0
+        ->  debug(dap(client), "Timed out while waiting for event", []),
+            Success = timeout
+        ;   debug(dap(client), "Spurious wakeup with ~w seconds remaining", [Timeout]),
+            dap_await_event(In, OnEventGoal, Events, Responses, Success, Timeout)
+        )
+    ;   debug(dap(client), "Read ready with ~w seconds remaining ", [Timeout]),
         dap_read(In, R),
         debug(dap(client), "Received message ~w while waiting for event ", [R]),
         _{ type : Type} :< R,
