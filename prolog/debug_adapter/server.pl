@@ -484,10 +484,12 @@ da_server_command("setFunctionBreakpoints", RequestSeq, Message, Out, _W, Seq0, 
     _{ breakpoints : DAPReqBreakpoints } :< Args,
     maplist(dap_prolog_function_breakpoint, DAPReqBreakpoints, ReqBreakpoints),
     nospyall,
+    retractall(da_breakpoint:da_known_function_breakpoint(_)),
     findall(_{verified:Verified},
             (member(Spec, ReqBreakpoints),
              (   current_predicate(Spec)
-             ->  spy(Spec), nodebug,
+             ->  asserta(da_breakpoint:da_known_function_breakpoint(Spec)),
+                 spy(Spec), nodebug,
                  Verified = true
              ;   Verified = false
              )),
