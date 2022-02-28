@@ -86,7 +86,7 @@ information about the current runtime.
 | SetDataBreakpoints        |        |
 | SetExceptionBreakpoints   | ✅      |
 | SetExpression             |        |
-| SetFunctionBreakpoints    |        |
+| SetFunctionBreakpoints    | ✅      |
 | SetInstructionBreakpoints |        |
 | SetVariable               |        |
 | Source                    | ✅      |

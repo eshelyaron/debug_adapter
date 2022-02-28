@@ -478,6 +478,22 @@ da_server_command("setExceptionBreakpoints", RequestSeq, Message, Out, _W, Seq0,
         dap_response(Out, Seq0, RequestSeq, "setExceptionBreakpoints", _{breakpoints:[_{verified:true}]})
     ),
     succ(Seq0, Seq).
+da_server_command("setFunctionBreakpoints", RequestSeq, Message, Out, _W, Seq0, Seq) :-
+    !,
+    _{ arguments   : Args              } :< Message,
+    _{ breakpoints : DAPReqBreakpoints } :< Args,
+    maplist(dap_prolog_function_breakpoint, DAPReqBreakpoints, ReqBreakpoints),
+    nospyall,
+    findall(_{verified:Verified},
+            (member(Spec, ReqBreakpoints),
+             (   current_predicate(Spec)
+             ->  spy(Spec), nodebug,
+                 Verified = true
+             ;   Verified = false
+             )),
+             DAPBreakpoints),
+    dap_response(Out, Seq0, RequestSeq, "setFunctionBreakpoints", _{breakpoints:DAPBreakpoints}),
+    succ(Seq0, Seq).
 da_server_command("source", RequestSeq, Message, Out, _W, Seq0, Seq) :-
     !,
     _{ arguments : Args } :< Message,
@@ -501,6 +517,9 @@ da_server_command(Command, RequestSeq, _Message, Out, _W, Seq0, Seq) :-
 dap_source_path(D, path(P)     ) :- _{ path            : P0 } :< D, !, absolute_file_name(P0, P).
 dap_source_path(D, reference(R)) :- _{ sourceReference : R  } :< D.
 
+dap_prolog_function_breakpoint(D, user:Spec) :-
+    get_dict(name, D, Name),
+    term_string(Spec, Name).
 
 dap_prolog_source_breakpoint(P, D, source_breakpoint(L, C, Cond, Hit, Log)) :-
     L    = D.get(line     , 0     ),
