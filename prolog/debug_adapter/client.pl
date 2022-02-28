@@ -95,6 +95,7 @@ dap_await_event(In, OnEventGoal, Events, Responses, Success, Timeout0) :-
     ->  Success = timeout
     ;   Timeout is Timeout0 - (Time - Time0),
         dap_read(In, R),
+        debug(dap(client), "Received message ~w while waiting for event ", [R]),
         _{ type : Type} :< R,
         (   Type == "response"
         ->  debug(dap(client), "Received response", []),
