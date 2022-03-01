@@ -6,13 +6,6 @@
    ).
 
 
-:- predicate_options(da_server/1, 1, [ in(+stream),
-                                       out(+stream),
-                                       interrupt(+pair),
-                                       threads(+list(pair))
-                                     ]
-                    ).
-
 /** <module> SWI-Prolog Debug Adapter Server
 
 This module contains the core logic for handling DAP request sent by DAP clients which are most
@@ -22,11 +15,25 @@ The implementation is most dominently guided by the [DAP
 specification](https://microsoft.github.io/debug-adapter-protocol/specification).
 */
 
+
+:- if(\+current_predicate(det/1)).
+user:det(_).
+:- endif.
+
 :- use_module(tracer).
 :- use_module(protocol).
 :- use_module(source).
 :- use_module(clause).
 :- use_module(breakpoint).
+
+
+:- predicate_options(da_server/1, 1, [ in(+stream),
+                                       out(+stream),
+                                       interrupt(+pair),
+                                       threads(+list(pair))
+                                     ]
+                    ).
+
 
 %!  da_server(+Options) is det.
 %
