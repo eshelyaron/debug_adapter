@@ -1,7 +1,10 @@
 # Examples
 
 ## Stepping through code
-![step](stepIn.gif)
+![step](gallery/stepIn.gif)
 
 ## Starting the debugger from a running Prolog top-level
-![pop](pop.gif)
+![pop](gallery/pop.gif)
+
+## Trapping exceptions
+![trap](gallery/trap.png)
