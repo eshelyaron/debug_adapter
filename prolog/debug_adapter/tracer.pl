@@ -95,7 +95,7 @@ prolog:message(da_tracer_top_level_query(false)) -->
     [ 'false.'-[] ].
 prolog:message(da_tracer_top_level_query(exception(E))) -->
     !,
-    [ '~w.'-[E] ].
+    [ 'unhandled exception: ~w.'-[E] ].
 
 
 da_tracer_top_level(Goal, VarNames, ExitCode) :-
