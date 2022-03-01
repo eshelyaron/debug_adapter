@@ -61,14 +61,25 @@ dap_await_response(In, Seq, Command, OnEventGoal, Events, Success, Message, Body
         _{ type : Type} :< R,
         (   Type == "response"
         ->  (   _{ request_seq : Seq, command : Command, success : Success } :< R
-            ->  Events = [], Message = R.get(message, null), Body = R.get(body, null),
+            ->  Events = [],
+                (   get_dict(message, R, Message)
+                ->  true
+                ;   Message = null
+                ),
+                (   get_dict(body, R, Body)
+                ->  true
+                ;   Body = null
+                ),
                 debug(dap(client), "Received response ~w ~w ~w ~w", [Seq, Success, Message, Body])
             ;   dap_await_response(In, Seq, Command, OnEventGoal, Events, Success, Message, Body, Timeout)
             )
         ;   Type == "event"
         ->  _{ seq : EventSeq0, event : EventType0 } :< R,
             debug(dap(client), "Received event ~w ~w", [EventSeq0, EventType0]),
-            EventBody0 = R.get(body, null),
+            (   get_dict(body, R, EventBody0)
+            ->  true
+            ;   EventBody0 = null
+            ),
             call(OnEventGoal, event(EventSeq0, EventType0, EventBody0), Events0),
             append(Events0, EventsT, Events),
             dap_await_response(In, Seq, Command, OnEventGoal, EventsT, Success, Message, Body, Timeout)
@@ -112,7 +123,10 @@ dap_await_event(In, OnEventGoal, Events, Responses, Success, Timeout0) :-
         ;   Type == "event"
         ->  _{ seq : EventSeq0, event : EventType0 } :< R,
             debug(dap(client), "Received event ~w ~w", [EventSeq0, EventType0]),
-            EventBody0 = R.get(body, null),
+            (   get_dict(body, R, EventBody0)
+            ->  true
+            ;   EventBody0 = null
+            ),
             (   call(OnEventGoal, event(EventSeq0, EventType0, EventBody0))
             ->  Success = true
             ;   Events = [R|Events1],

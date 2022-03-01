@@ -6,13 +6,6 @@
    ).
 
 
-:- predicate_options(da_server/1, 1, [ in(+stream),
-                                       out(+stream),
-                                       interrupt(+pair),
-                                       threads(+list(pair))
-                                     ]
-                    ).
-
 /** <module> SWI-Prolog Debug Adapter Server
 
 This module contains the core logic for handling DAP request sent by DAP clients which are most
@@ -22,11 +15,25 @@ The implementation is most dominently guided by the [DAP
 specification](https://microsoft.github.io/debug-adapter-protocol/specification).
 */
 
+
+:- if(\+current_predicate(det/1)).
+user:det(_).
+:- endif.
+
 :- use_module(tracer).
 :- use_module(protocol).
 :- use_module(source).
 :- use_module(clause).
 :- use_module(breakpoint).
+
+
+:- predicate_options(da_server/1, 1, [ in(+stream),
+                                       out(+stream),
+                                       interrupt(+pair),
+                                       threads(+list(pair))
+                                     ]
+                    ).
+
 
 %!  da_server(+Options) is det.
 %
@@ -175,12 +182,16 @@ da_server_handle_debugee_message(_DebugeeThreadId,
                                  output(Term, _Kind, _Lines),
                                  Out, Seq0, Seq) :-
     !,
-    message_to_string(Term, String0),
-    string_concat(String0, "\n", String),
-    dap_event(Out, Seq0, "output", _{ category : "stdout",
-                                      output   : String
-                                    }),
-    succ(Seq0, Seq).
+    catch((   message_to_string(Term, String0),
+              string_concat(String0, "\n", String),
+              dap_event(Out, Seq0, "output", _{ category : "stdout",
+                                                output   : String
+                                              }),
+              succ(Seq0, Seq)
+          ),
+          _Catcher,
+          Seq = Seq0
+         ).
 da_server_handle_debugee_message(_DebugeeThreadId,
                                   stack_trace(RequestSeq, StackFrames0),
                                   Out, Seq0, Seq) :-
@@ -424,7 +435,10 @@ da_server_command("stepIn", RequestSeq, Message, Out, _W, Seq0, Seq) :-
     !,
     _{ arguments : Args     } :< Message,
     _{ threadId  : ThreadId } :< Args,
-    Target = Args.get(targetId, 0),
+    (   get_dict(targetId, Args, Target)
+    ->  true
+    ;   Target = 0
+    ),
     dap_response(Out, Seq0, RequestSeq, "stepIn"),
     succ(Seq0, Seq),
     thread_send_message(ThreadId, step_in(Target)).
@@ -551,10 +565,19 @@ dap_prolog_function_breakpoint(D, user:Spec) :-
     term_string(Spec, Name).
 
 dap_prolog_source_breakpoint(P, D, source_breakpoint(L, C, Cond, Hit, Log)) :-
-    L    = D.get(line     , 0     ),
-    C0   = D.get(column   , 5     ),  % 5 is a "guess" of the indentation.
+    (   get_dict(line, D, L)
+    ->  true
+    ;   L = 0
+    ),
+    (   get_dict(column, D, C0)
+    ->  true
+    ;   C0 = 5    % 5 is a "guess" of the indentation.
+    ),
     da_source_file_offsets_line_column_pairs(P, [C], [L-C0]),
-    Cond = D.get(condition, "true"),
+    (   get_dict(condition, D, Cond)
+    ->  true
+    ;   Cond = "true"
+    ),
     (   get_dict(logMessage, D, Log0)
     ->  Log = log_message(Log0)
     ;   Log = null
