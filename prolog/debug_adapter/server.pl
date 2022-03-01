@@ -577,7 +577,7 @@ da_server_capabilities(_{ supportsConfigurationDoneRequest  : true,
                           supportsHitConditionalBreakpoints : true,
                           supportsLogPoints                 : true,
                           supportsStepInTargetsRequest      : true,
-                          exceptionBreakpointFilters        : [ _{ filter : "true" , label : "Trap exceptions", default: true } ]
+                          exceptionBreakpointFilters        : [ _{ filter : "true" , label : "Trap exceptions", default: false } ]
                         }
                       ).
 
