@@ -29,7 +29,7 @@ jobs:
         uses: logtalk-actions/setup-swi-prolog@master
         with:
           swi-prolog-branch: stable
-          swi-prolog-version: 8.2.4
+          swi-prolog-version: 8.2.4*
 
       - uses: actions/checkout@v2
 
