@@ -3,7 +3,7 @@
 The following changes were introduced since version 0.5.0 of the
 `debug_adapter` package:
 
-## Add support for jumping to a choicepoint by force-failing the current goal
+## Added support for jumping to a choicepoint by force-failing the current goal
 
 The `debug_adapter` server now interprets the `targetId` field of the
 [`stepIn`](https://microsoft.github.io/debug-adapter-protocol/specification#Requests_StepIn)
@@ -28,7 +28,7 @@ nondeterministic context to a deterministic one, was added to the test
 suite.
 
 
-## Add support for exception breakpoints
+## Added support for exception breakpoints
 
 Exception breakpoints are a standard DAP feature defined in [the
 specification](https://microsoft.github.io/debug-adapter-protocol/specification),
@@ -65,7 +65,7 @@ all thrown exceptions, i.e. has a similar effect as:
 
 ![trap](gallery/trap.png)
 
-## Add support for function breakpoints
+## Added support for function breakpoints
 
 Function breakpoints are a standard DAP feature defined in [the
 specification](https://microsoft.github.io/debug-adapter-protocol/specification).
@@ -100,7 +100,7 @@ An end-to-end test of setting and hitting function breakpoints was
 added to the test suite.
 
 
-## Report which breakpoint was hit in stopping on breakpoints
+## Report which breakpoint was hit when stopping on breakpoints
 
 The `debug_adapter` server will now set the `hitBreakpointIds` field of
 [`stopped`](https://microsoft.github.io/debug-adapter-protocol/specification#Events_Stopped)
