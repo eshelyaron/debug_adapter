@@ -210,6 +210,13 @@ da_server_handle_debugee_message(_DebugeeThreadId,
     dap_response(Out, Seq0, RequestSeq, "variables", _{variables:Variables}),
     succ(Seq0, Seq).
 da_server_handle_debugee_message(_DebugeeThreadId,
+                                 step_in_targets(RequestSeq, Targets),
+                                 Out, Seq0, Seq) :-
+    !,
+    maplist(prolog_dap_step_in_target, Targets, DAPTargets),
+    dap_response(Out, Seq0, RequestSeq, "stepInTargets", _{targets:DAPTargets}),
+    succ(Seq0, Seq).
+da_server_handle_debugee_message(_DebugeeThreadId,
                                   evaluate(RequestSeq, Result, Bindings),
                                   Out, Seq0, Seq) :-
     !,
@@ -246,6 +253,12 @@ da_server_handle_debugee_message(DebugeeThreadId,
     ;   true
     ).
 
+prolog_dap_step_in_target(step_in_target(Id, null), _{ id    : Id,
+                                                       label : "step"
+                                                     }) :- !.
+prolog_dap_step_in_target(step_in_target(Id, _Alt), _{ id    : Id,
+                                                       label : "fail"
+                                                     }).
 
 safe_thread_send_message(ThreadId, disconnect) :-
     catch(thread_send_message(ThreadId, disconnect), Catcher, true),
@@ -402,13 +415,19 @@ da_server_command("pause", RequestSeq, Message, Out, _W, Seq0, Seq) :-
     ;   dap_error(Out, Seq0, RequestSeq, "pause", "Thread is not running")
     ),
     succ(Seq0, Seq).
+da_server_command("stepInTargets", RequestSeq, Message, _Out, _W, Seq, Seq) :-
+    !,
+    _{ arguments : Args    } :< Message,
+    _{ frameId   : FrameId } :< Args,
+     forall(da_server_debugee_thread(ThreadId, _), thread_send_message(ThreadId, step_in_targets(RequestSeq, FrameId))).
 da_server_command("stepIn", RequestSeq, Message, Out, _W, Seq0, Seq) :-
     !,
-    _{ arguments:Args } :< Message,
-    _{ threadId:ThreadId } :< Args,
+    _{ arguments : Args     } :< Message,
+    _{ threadId  : ThreadId } :< Args,
+    Target = Args.get(targetId, 0),
     dap_response(Out, Seq0, RequestSeq, "stepIn"),
     succ(Seq0, Seq),
-    thread_send_message(ThreadId, step_in).
+    thread_send_message(ThreadId, step_in(Target)).
 da_server_command("stepOut", RequestSeq, Message, Out, _W, Seq0, Seq) :-
     !,
     _{ arguments:Args } :< Message,
@@ -557,6 +576,7 @@ da_server_capabilities(_{ supportsConfigurationDoneRequest  : true,
                           supportsConditionalBreakpoints    : true,
                           supportsHitConditionalBreakpoints : true,
                           supportsLogPoints                 : true,
+                          supportsStepInTargetsRequest      : true,
                           exceptionBreakpointFilters        : [ _{ filter : "true" , label : "Trap exceptions", default: true } ]
                         }
                       ).
@@ -588,9 +608,8 @@ da_launch(Args, _Out, W, Seq, Seq) :-
     _{ cwd: CWD, module: ModulePath, goal: GoalString } :< Args,
     !,
     cd(CWD),
-    term_string(Goal, GoalString),
     thread_self(ServerThreadId),
-    thread_create(da_debugee(ModulePath, Goal, ServerThreadId, W), _PrologThreadId).
+    thread_create(da_debugee(ModulePath, GoalString, ServerThreadId, W), _PrologThreadId).
 
 
 da_attach(_Args, _Out, _W, Seq, Seq).
