@@ -100,7 +100,7 @@ da_tracer_setup(ServerThreadId, ServerInterruptHandle) :-
     asserta((user:prolog_exception_hook(Ex, Out, Frame, Catcher) :-
                  da_exception_hook(Ex, Out, Frame, Catcher))),
     set_prolog_flag(gui_tracer, true),
-    visible(+all),
+    visible([+call, +exit, +fail, +redo, +unify, +cut_call, +cut_exit, +exception]),
     prolog_skip_level(_, very_deep).
 
 :- dynamic da_tracer_trapping/0.
@@ -243,6 +243,10 @@ da_tracer_handled_message(stack_trace(RequestId), Port, Frame, Choice, loop, S, 
     da_stack_frame_at_port(Frame, Port, Choice, ActiveFrame),
     da_stack_trace(Frame, StackTrace),
     da_debugee_emitted_message(stack_trace(RequestId, [ActiveFrame|StackTrace]), S, W).
+da_tracer_handled_message(step_in_targets(RequestId, FrameId), _Port, Frame, Choice, loop, S, W) :-
+    !,
+    da_frame_step_in_targets(FrameId, Frame, Choice, Targets),
+    da_debugee_emitted_message(step_in_targets(RequestId, Targets), S, W).
 da_tracer_handled_message(scopes(RequestId, FrameId), Port, ActiveFrameId, _Choice, loop, S, W) :-
     !,
     da_frame_scopes(FrameId, ActiveFrameId, Port, Scopes),
@@ -254,7 +258,11 @@ da_tracer_handled_message(variables(RequestId, VariablesRef), _Port, _Frame, _Ch
 da_tracer_handled_message(exception_info(RequestId), exception(Exception), _Frame, _Choice, loop, S, W) :-
     !,
     da_debugee_emitted_message(exception_info(RequestId, Exception), S, W).
-da_tracer_handled_message(step_in, _Port, _Frame, _Choice, continue, S, W) :-
+da_tracer_handled_message(step_in(0), _Port, _Frame, _Choice, continue, S, W) :-
+    !,
+    da_debugee_emitted_message(continued, S, W),
+    asserta(da_tracer_last_action(step_in)).
+da_tracer_handled_message(step_in(1), _Port, _Frame, _Choice, fail, S, W) :-
     !,
     da_debugee_emitted_message(continued, S, W),
     asserta(da_tracer_last_action(step_in)).

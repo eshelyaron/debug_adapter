@@ -93,7 +93,7 @@ information about the current runtime.
 | StackTrace                | obtain stacktrace from the current execution state of a given thread | ✅     |
 | StepBack                  | execute the specified thread one backward step                       |        |
 | StepIn                    | resume the specified thread to step into a function                  | ✅     |
-| StepInTargets             | obtain possible stepIn targets for the specified stackframe          |        |
+| StepInTargets             | obtain possible stepIn targets for the specified stackframe          | ✅     |
 | StepOut                   | resume the specified thread to step out from a function              | ✅     |
 | Terminate                 | terminate the specified thread                                       |        |
 | TerminateThreads          | terminate the specified threads                                      |        |
