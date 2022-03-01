@@ -16,7 +16,8 @@
            da_frame_scopes/4,
            da_frame_evaluate/4,
            da_frame_variables_mapping/2,
-           da_referenced_variables/2
+           da_referenced_variables/2,
+           da_frame_step_in_targets/4
        ]
    ).
 
@@ -168,6 +169,7 @@ da_alternative(clause, ChoicePoint, clause(Clause)) :-
     prolog_choice_attribute(ChoicePoint, clause, Clause).
 da_alternative(none, _, null) :- !.
 da_alternative(debug, _, null) :- !.
+da_alternative(catch, _, null) :- !.
 da_alternative(top, _, null) :- !.
 da_alternative(_, ChoicePoint, frame(Frame)) :-
     !,
@@ -443,3 +445,14 @@ da_frame_variables_mapping(FrameId, Map) :-
                 prolog_frame_attribute(FrameId, argument(I), Value)
             ),
             Map).
+
+
+da_frame_step_in_targets(FrameId, FrameId, Choice, [step_in_target(0, null)|Targets]) :-
+    !,
+    da_alternative(Choice, Alternative),
+    da_alternative_step_in_targets(Alternative, Targets).
+da_frame_step_in_targets(_, _, _, []).
+
+
+da_alternative_step_in_targets(null, []) :- !.
+da_alternative_step_in_targets(Alt, [step_in_target(1, Alt)]).
