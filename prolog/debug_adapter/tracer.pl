@@ -43,10 +43,11 @@ prolog:open_source_hook(Path, Stream, _Options) :-
 % Keep the directive in a comment for reference.
 % :- meta_predicate da_debugee(?, 0, ?, ?).
 
-da_debugee(ModulePath, Goal, ServerThreadId, ServerInterruptHandle) :-
+da_debugee(ModulePath, GoalString, ServerThreadId, ServerInterruptHandle) :-
     da_debugee_emitted_message(thread_started, ServerThreadId, ServerInterruptHandle),
     thread_get_message(_), % wait for a trigger from the server
-    debug(dap(tracer), "starting debugee thread with source file ~w and goal ~w", [ModulePath, Goal]),
+    debug(dap(tracer), "starting debugee thread with source file ~w and goal ~w", [ModulePath, GoalString]),
+    term_string(Goal, GoalString, [variable_names(VarNames)]),
     absolute_file_name(ModulePath, AbsModulePath, []),
     debug(dap(tracer), "Absolute path to source file ~w", [AbsModulePath]),
     user:ensure_loaded(AbsModulePath),
@@ -56,7 +57,7 @@ da_debugee(ModulePath, Goal, ServerThreadId, ServerInterruptHandle) :-
     ;   QGoal = Goal
     ),
     debug(dap(tracer), "debugee qualified goal ~w", [QGoal]),
-    da_trace(QGoal, ServerThreadId, ServerInterruptHandle).
+    da_trace(QGoal, VarNames, ServerThreadId, ServerInterruptHandle).
 
 da_debugee_emitted_message(Message, ServerThreadId, ServerInterruptHandle) :-
     thread_self(DebugeePrologThreadId),
@@ -69,23 +70,47 @@ da_server_interrupt(Handle) :-
     put_code(Handle, 3).
 
 
-:- meta_predicate da_trace(0, ?, ?).
+:- meta_predicate da_trace(0, ?, ?, ?).
 
-da_trace(Goal, ServerThreadId, ServerInterruptHandle) :-
+da_trace(Goal, VarNames, ServerThreadId, ServerInterruptHandle) :-
     debug(dap(tracer), "tracer setup", []),
     da_tracer_setup(ServerThreadId, ServerInterruptHandle),
-    da_tracer_top_level(Goal, ExitCode),
+    da_tracer_top_level(Goal, VarNames, ExitCode),
     debug(dap(tracer), "tracer cleanup", []),
     da_debugee_exited(ExitCode, ServerThreadId, ServerInterruptHandle).
 
 
-da_tracer_top_level(Goal, ExitCode) :-
+
+:- multifile prolog:message//1.
+
+prolog:message(da_tracer_top_level_query(true([]))) -->
+    !,
+    [ 'true.'-[] ].
+prolog:message(da_tracer_top_level_query(true(VarNames))) -->
+    !,
+    [ '~p'-[VarNames], nl ],
+    [ 'true.'-[] ].
+prolog:message(da_tracer_top_level_query(false)) -->
+    !,
+    [ 'false.'-[] ].
+prolog:message(da_tracer_top_level_query(exception(E))) -->
+    !,
+    [ '~w.'-[E] ].
+
+
+da_tracer_top_level(Goal, VarNames, ExitCode) :-
     catch((   trace, Goal, notrace
-          ->  ExitCode = 0
-          ;   notrace, ExitCode = 1
+          ->  print_message(trace, da_tracer_top_level_query(true(VarNames))),
+              ExitCode = 0
+          ;   notrace,
+              print_message(trace, da_tracer_top_level_query(false)),
+              ExitCode = 1
           ),
-          _Catcher,
-          (notrace, ExitCode = 2)
+          Catcher,
+          (notrace,
+           print_message(trace, da_tracer_top_level_query(exception(Catcher))),
+           ExitCode = 2
+          )
          ).
 
 

@@ -608,9 +608,8 @@ da_launch(Args, _Out, W, Seq, Seq) :-
     _{ cwd: CWD, module: ModulePath, goal: GoalString } :< Args,
     !,
     cd(CWD),
-    term_string(Goal, GoalString),
     thread_self(ServerThreadId),
-    thread_create(da_debugee(ModulePath, Goal, ServerThreadId, W), _PrologThreadId).
+    thread_create(da_debugee(ModulePath, GoalString, ServerThreadId, W), _PrologThreadId).
 
 
 da_attach(_Args, _Out, _W, Seq, Seq).
