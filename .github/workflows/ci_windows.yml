@@ -23,4 +23,4 @@ jobs:
       - name: Run Tests
         shell: cmd
         run: |
-          swipl test/server.pl
+          "C:\Program Files\swipl\bin\swipl.exe" test/server.pl
