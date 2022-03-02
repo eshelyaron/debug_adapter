@@ -1,4 +1,4 @@
-name: CI
+name: Windows CI
 
 on:
   push:
@@ -16,6 +16,11 @@ jobs:
       - name: Install SWI-Prolog for Windows
         run: |
           choco install swi-prolog
+      - name: Set PATH
+        shell: cmd
+        run: |
+          call refreshenv
+          echo ::set-env name=PATH::%PATH%
 
       - uses: actions/checkout@v2
 
