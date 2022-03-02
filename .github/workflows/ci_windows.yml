@@ -15,11 +15,7 @@ jobs:
     steps:
       - name: Install SWI-Prolog for Windows
         run: |
-          choco install swi-prolog
-      - name: Set PATH
-        shell: cmd
-        run: |
-          call refreshenv
+          choco install -y swi-prolog
           echo "CPATH=C:\Program Files\swipl\bin;C:\Program Files (x86)\swipl\bin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - uses: actions/checkout@v2
