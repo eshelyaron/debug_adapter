@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Install SWI-Prolog for Windows
+        run: |
+          choco install swi-prolog
+
+      - uses: actions/checkout@v2
+
+      - name: Run Tests
+        run: |
+          swipl test/server.pl
