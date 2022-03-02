@@ -20,6 +20,18 @@ specification](https://microsoft.github.io/debug-adapter-protocol/specification)
 user:det(_).
 :- endif.
 
+:- if(\+current_predicate(pipe/2)).
+user:pipe(In, Out) :-
+    tcp_socket(ServerSocket),
+    tcp_setopt(ServerSocket, reuseaddr),
+    tcp_bind(ServerSocket, Port),
+    tcp_listen(ServerSocket, 1),
+    tcp_connect(localhost:Port, StreamPair, []),
+    stream_pair(StreamPair, _, Out),
+    tcp_accept(ServerSocket, ClientSocket, _Peer),
+    tcp_open_socket(ClientSocket, In, _).
+:- endif.
+
 :- use_module(tracer).
 :- use_module(protocol).
 :- use_module(source).
