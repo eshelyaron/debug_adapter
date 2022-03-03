@@ -24,4 +24,5 @@ jobs:
         run: |
           "C:\Program Files\swipl\bin\swipl.exe" -g "pack_install('.', [interactive(false)])" -t halt
           "C:\Program Files\swipl\bin\swipl.exe" -g "[library(debug_adapter/main)]" -t halt -- -V
+          "C:\Program Files\swipl\bin\swipl.exe" -g "[library(debug_adapter/client)]" -g "dap_script([reqres(\"disconnect\"), event(\"exited\")])" -t halt
           "C:\Program Files\swipl\bin\swipl.exe" test/server.pl
