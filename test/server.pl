@@ -10,7 +10,7 @@ cwd(CWD) :-
     source_file(user:da_server_test_marker_predicate, ThisFile),
     file_directory_name(ThisFile, CWD).
 
-:- use_module("../prolog/debug_adapter/client.pl").
+:- use_module(library(debug_adapter/client)).
 
 
 user:term_expansion((script(Name) :- Body),

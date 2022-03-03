@@ -22,4 +22,5 @@ jobs:
       - name: Run Tests
         shell: cmd
         run: |
+          "C:\Program Files\swipl\bin\swipl.exe" -g "pack_install('.', [interactive(false)])" -t halt
           "C:\Program Files\swipl\bin\swipl.exe" test/server.pl
