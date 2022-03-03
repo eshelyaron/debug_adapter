@@ -26,7 +26,6 @@ specification](https://microsoft.github.io/debug-adapter-protocol/specification)
 
 :- predicate_options(da_server/1, 1, [ in(+stream),
                                        out(+stream),
-                                       interrupt(+pair),
                                        threads(+list(pair))
                                      ]
                     ).
@@ -39,8 +38,6 @@ specification](https://microsoft.github.io/debug-adapter-protocol/specification)
 %      Stream will be used by the server to read incoming messages from the client. Defaults to user_input.
 %    - out(+Stream)
 %      Stream will be used by the server to emit outgoing messages to the client. Defaults to user_output.
-%    - interrupt(+RW)
-%      Internal. Used by da_trace_interception/4 to bootstrap a DAP server from a debuggee thread.
 %    - threads(+Threads)
 %      List of initial debuggee threads to be monitored by the server.
 
@@ -50,84 +47,52 @@ da_server(Options) :-
     option(in(In), Options, user_input),
     option(out(Out), Options, user_output),
     set_stream(In, buffer(full)),
-    set_stream(In, encoding(octet)),
     set_stream(In, newline(detect)),
     set_stream(In, representation_errors(error)),
     set_stream(In, tty(false)),
+    thread_self(Self),
+    thread_create(stream_forward(In, Self), _, []),
     set_stream(Out, buffer(false)),
-    set_stream(Out, encoding(octet)),
     set_stream(Out, tty(false)),
-    (   option(interrupt(R-W), Options)
-    ->  true
-    ;   pipe(R, W)
-    ),
-    set_stream(R, buffer(full)),
-    set_stream(R, encoding(octet)),
-    set_stream(W, buffer(false)),
     option(threads(Threads), Options, []),
     forall(member(T-S, Threads), asserta(da_server_debugee_thread(T, S))),
-    da_server_loop(1, In, Out, R, W).
+    da_server_loop(1, Out).
 
 :- thread_local da_server_debugee_thread/2.
 :- thread_local da_server_disconnecting/0.
 
-:- det(da_server_loop/5).
-da_server_loop(Seq0, In, Out, R, W) :-
-    da_server_disconnecting,
+:- det(da_server_loop/2).
+da_server_loop(Seq0, Out) :-
+    debug(dap(server), "waiting for a message", []),
+    thread_get_message(M),
+    da_server_handle(M, Seq0, Seq, Out),
+    debug(dap(server), "handled ~w", [M]),
+    da_server_loop(Seq, Out).
+
+da_server_handle(DebugeeThreadId-Message, Seq0, Seq, Out) :-
     !,
-    (   da_server_debugee_thread(_, _)
-    ->  wait_for_input([R], _Inputs, infinite),
-        get_code(R, _),
-        da_server_handle_debugee_messages(Out, Seq0, Seq),
-        da_server_loop(Seq, In, Out, R, W)
-    ;   close(R),
-        close(W),
-        dap_event(Out, Seq0, "exited", _{exitCode:0}),
-        thread_exit(0)
-    ).
-da_server_loop(Seq0, In, Out, R, W) :-
-    wait_for_input([In, R], Inputs, infinite),
-    da_server_handle_streams(In, R, Inputs, Out, W, Seq0, Seq),
-    da_server_loop(Seq, In, Out, R, W).
-
-
-:- det(da_server_handle_streams/7).
-da_server_handle_streams(In, R, [H|T], Out, W, Seq0, Seq) :-
+    debug(dap(server), "Received message ~w from debugee thread ~w", [Message, DebugeeThreadId]),
+    da_server_handle_debugee_message(DebugeeThreadId, Message, Out, Seq0, Seq),
+    debug(dap(server), "Handled message ~w from debugee thread ~w", [Message, DebugeeThreadId]).
+da_server_handle(stream(_, _), Seq, Seq, _) :-
+    da_server_disconnecting, !.
+da_server_handle(stream(_, Message), Seq, Seq, _) :-
+    get_dict(type, Message, "response"), !.
+da_server_handle(stream(_, Message0), Seq0, Seq, Out) :-
     !,
-    da_server_handle_stream(In, R, H, Out, W, Seq0, Seq1),
-    da_server_handle_streams(In, R, T, Out, W, Seq1, Seq).
-da_server_handle_streams(_, _, [], _, _, Seq, Seq).
+    del_dict(seq, Message0, RequestSeq, Message1),
+    del_dict(command, Message1, Command, Message),
+    da_server_command(Command, RequestSeq, Message, Out, Seq0, Seq).
 
 
-:- det(da_server_handle_stream/7).
-da_server_handle_stream(In, _R, In, Out, W, Seq0, Seq) :-
-    !,
-    dap_read(In, Message0),
-    del_dict(seq,  Message0, ClientSeq, Message1),
-    del_dict(type, Message1, Type, Message),
-    debug(dap(server), "Received message ~w from client", [Message]),
-    da_server_handle_message(Type, ClientSeq, Message, Out, W, Seq0, Seq),
-    debug(dap(server), "Handled message ~w from client", [Message]).
-da_server_handle_stream(_In, R, R, Out, _, Seq0, Seq) :-
-    !,
-    get_code(R, _),
-    da_server_handle_debugee_messages(Out, Seq0, Seq).
-
-
-da_server_handle_message("request", RequestSeq, Message0, Out, W, Seq0, Seq) :-
-    del_dict(command, Message0, Command, Message),
-    da_server_command(Command, RequestSeq, Message, Out, W, Seq0, Seq).
-da_server_handle_message("response", _Seq, _Message, _Out, _W, Seq, Seq).
-
-
-da_server_handle_debugee_messages(Out, Seq0, Seq) :-
-    (   thread_peek_message(_)
-    ->  thread_get_message(DebugeeThreadId-Message),
-        debug(dap(server), "Received message ~w from debugee thread ~w", [Message, DebugeeThreadId]),
-        da_server_handle_debugee_message(DebugeeThreadId, Message, Out, Seq0, Seq1),
-        debug(dap(server), "Handled message ~w from debugee thread ~w", [Message, DebugeeThreadId]),
-        da_server_handle_debugee_messages(Out, Seq1, Seq)
-    ;   Seq = Seq0
+stream_forward(S, T) :-
+    debug(dap(server), "waiting", []),
+    dap_read(S, Message),
+    debug(dap(server), "forwarding ~w to ~w", [Message, T]),
+    thread_send_message(T, stream(S, Message)),
+    (   get_dict(command, Message, "disconnect")
+    ->  debug(dap(server), "bye", [])
+    ;   stream_forward(S, T)
     ).
 
 
@@ -235,14 +200,19 @@ da_server_handle_debugee_message(_DebugeeThreadId,
                                   exited(_ExitCode),
                                   _Out, Seq, Seq) :- !.
 da_server_handle_debugee_message(DebugeeThreadId,
-                                  thread_exited,
-                                  Out, Seq0, Seq) :-
+                                 thread_exited,
+                                 Out, Seq0, Seq) :-
     !,
     dap_event(Out, Seq0, "thread", _{ reason   : "exited",
                                       threadId : DebugeeThreadId
                                     }),
     succ(Seq0, Seq),
-    retract(da_server_debugee_thread(DebugeeThreadId, _)).
+    retract(da_server_debugee_thread(DebugeeThreadId, _)),
+    (   da_server_disconnecting, \+ da_server_debugee_thread(_, _)
+    ->  dap_event(Out, Seq, "exited", _{exitCode:0}),
+        thread_exit(0)
+    ;   true
+    ).
 da_server_handle_debugee_message(DebugeeThreadId,
                                  thread_started,
                                  Out, Seq0, Seq) :-
@@ -356,8 +326,8 @@ prolog_dap_in_frame_label(pc(PC), DAPLabel) :-
 
 :- dynamic da_server_configured/0.
 
-:- det(da_server_command/7).
-da_server_command("initialize", RequestSeq, Message, Out, _W, Seq0, Seq) :-
+:- det(da_server_command/6).
+da_server_command("initialize", RequestSeq, Message, Out, Seq0, Seq) :-
     !,
     _{ arguments:Args } :< Message,
     da_server_capabilities(Capabilities),
@@ -366,25 +336,25 @@ da_server_command("initialize", RequestSeq, Message, Out, _W, Seq0, Seq) :-
     da_initialized(Args),
     dap_event(Out, Seq1, "initialized"),
     succ(Seq1, Seq).
-da_server_command("launch", RequestSeq, Message, Out, W, Seq0, Seq) :-
+da_server_command("launch", RequestSeq, Message, Out, Seq0, Seq) :-
     !,
     _{ arguments:Args } :< Message,
-    da_launch(Args, Out, W, Seq0, Seq1),
+    da_launch(Args, Out, Seq0, Seq1),
     dap_response(Out, Seq1, RequestSeq, "launch"),
     succ(Seq1, Seq).
-da_server_command("attach", RequestSeq, Message, Out, W, Seq0, Seq) :-
+da_server_command("attach", RequestSeq, Message, Out, Seq0, Seq) :-
     !,
     _{ arguments:Args } :< Message,
-    da_attach(Args, Out, W, Seq0, Seq1),
+    da_attach(Args, Out, Seq0, Seq1),
     dap_response(Out, Seq1, RequestSeq, "attach"),
     succ(Seq1, Seq).
-da_server_command("configurationDone", RequestSeq, _Message, Out, _W, Seq0, Seq) :-
+da_server_command("configurationDone", RequestSeq, _Message, Out, Seq0, Seq) :-
     !,
     forall(da_server_debugee_thread(ThreadId, _), thread_send_message(ThreadId, configuration_done)),
     asserta(da_server_configured),
     dap_response(Out, Seq0, RequestSeq, "configurationDone"),
     succ(Seq0, Seq).
-da_server_command("threads", RequestSeq, _Message, Out, _W, Seq0, Seq) :-
+da_server_command("threads", RequestSeq, _Message, Out, Seq0, Seq) :-
     !,
     findall(_{ name : Name,
                id   : Id
@@ -395,7 +365,7 @@ da_server_command("threads", RequestSeq, _Message, Out, _W, Seq0, Seq) :-
             Threads),
     dap_response(Out, Seq0, RequestSeq, "threads", _{threads:Threads}),
     succ(Seq0, Seq).
-da_server_command("stackTrace", RequestSeq, Message, Out, _W, Seq0, Seq) :-
+da_server_command("stackTrace", RequestSeq, Message, Out, Seq0, Seq) :-
     !,
     _{ arguments:Args } :< Message,
     _{ threadId:ThreadId } :< Args,
@@ -403,7 +373,7 @@ da_server_command("stackTrace", RequestSeq, Message, Out, _W, Seq0, Seq) :-
           _Catcher,
           (dap_error(Out, Seq0, RequestSeq, "stackTrace", null), succ(Seq0, Seq))
          ).
-da_server_command("exceptionInfo", RequestSeq, Message, Out, _W, Seq0, Seq) :-
+da_server_command("exceptionInfo", RequestSeq, Message, Out, Seq0, Seq) :-
     !,
     _{ arguments:Args } :< Message,
     _{ threadId:ThreadId } :< Args,
@@ -411,7 +381,7 @@ da_server_command("exceptionInfo", RequestSeq, Message, Out, _W, Seq0, Seq) :-
           _Catcher,
           (dap_error(Out, Seq0, RequestSeq, "exceptionInfo", null), succ(Seq0, Seq))
          ).
-da_server_command("pause", RequestSeq, Message, Out, _W, Seq0, Seq) :-
+da_server_command("pause", RequestSeq, Message, Out, Seq0, Seq) :-
     !,
     _{ arguments:Args } :< Message,
     _{ threadId:ThreadId } :< Args,
@@ -423,12 +393,12 @@ da_server_command("pause", RequestSeq, Message, Out, _W, Seq0, Seq) :-
     ;   dap_error(Out, Seq0, RequestSeq, "pause", "Thread is not running")
     ),
     succ(Seq0, Seq).
-da_server_command("stepInTargets", RequestSeq, Message, _Out, _W, Seq, Seq) :-
+da_server_command("stepInTargets", RequestSeq, Message, _Out, Seq, Seq) :-
     !,
     _{ arguments : Args    } :< Message,
     _{ frameId   : FrameId } :< Args,
      forall(da_server_debugee_thread(ThreadId, _), thread_send_message(ThreadId, step_in_targets(RequestSeq, FrameId))).
-da_server_command("stepIn", RequestSeq, Message, Out, _W, Seq0, Seq) :-
+da_server_command("stepIn", RequestSeq, Message, Out, Seq0, Seq) :-
     !,
     _{ arguments : Args     } :< Message,
     _{ threadId  : ThreadId } :< Args,
@@ -439,52 +409,57 @@ da_server_command("stepIn", RequestSeq, Message, Out, _W, Seq0, Seq) :-
     dap_response(Out, Seq0, RequestSeq, "stepIn"),
     succ(Seq0, Seq),
     thread_send_message(ThreadId, step_in(Target)).
-da_server_command("stepOut", RequestSeq, Message, Out, _W, Seq0, Seq) :-
+da_server_command("stepOut", RequestSeq, Message, Out, Seq0, Seq) :-
     !,
     _{ arguments:Args } :< Message,
     _{ threadId:ThreadId } :< Args,
     dap_response(Out, Seq0, RequestSeq, "stepOut"),
     succ(Seq0, Seq),
     thread_send_message(ThreadId, step_out).
-da_server_command("next", RequestSeq, Message, Out, _W, Seq0, Seq) :-
+da_server_command("next", RequestSeq, Message, Out, Seq0, Seq) :-
     !,
     _{ arguments:Args } :< Message,
     _{ threadId:ThreadId } :< Args,
     dap_response(Out, Seq0, RequestSeq, "next"),
     succ(Seq0, Seq),
     thread_send_message(ThreadId, next).
-da_server_command("continue", RequestSeq, Message, Out, _W, Seq0, Seq) :-
+da_server_command("continue", RequestSeq, Message, Out, Seq0, Seq) :-
     !,
     _{ arguments:Args } :< Message,
     _{ threadId:ThreadId } :< Args,
     dap_response(Out, Seq0, RequestSeq, "continue", _{allThreadsContinued:null}),
     succ(Seq0, Seq),
     thread_send_message(ThreadId, continue).
-da_server_command("disconnect", RequestSeq, _Message, Out, _W, Seq0, Seq) :-
+da_server_command("disconnect", RequestSeq, _Message, Out, Seq0, Seq) :-
     !,
     retractall(da_server_disconnecting),
     asserta(da_server_disconnecting),
     forall(da_server_debugee_thread(ThreadId, _), thread_send_message(ThreadId, disconnect)),
     dap_response(Out, Seq0, RequestSeq, "disconnect"),
-    succ(Seq0, Seq).
-da_server_command("restartFrame", RequestSeq, Message, Out, _W, Seq0, Seq) :-
+    succ(Seq0, Seq),
+    (   \+ da_server_debugee_thread(_, _)
+    ->  dap_event(Out, Seq, "exited", _{exitCode:0}),
+        thread_exit(0)
+    ;   true
+    ).
+da_server_command("restartFrame", RequestSeq, Message, Out, Seq0, Seq) :-
     !,
     _{ arguments : Args    } :< Message,
     _{ frameId   : FrameId } :< Args,
     dap_response(Out, Seq0, RequestSeq, "restartFrame"),
     succ(Seq0, Seq),
     forall(da_server_debugee_thread(ThreadId, _), thread_send_message(ThreadId, restartFrame(FrameId))).
-da_server_command("scopes", RequestSeq, Message, _Out, _W, Seq, Seq) :-
+da_server_command("scopes", RequestSeq, Message, _Out, Seq, Seq) :-
     !,
     _{ arguments:Args } :< Message,
     _{ frameId:FrameId } :< Args,
     forall(da_server_debugee_thread(ThreadId, _), thread_send_message(ThreadId, scopes(RequestSeq, FrameId))).
-da_server_command("variables", RequestSeq, Message, _Out, _W, Seq, Seq) :-
+da_server_command("variables", RequestSeq, Message, _Out, Seq, Seq) :-
     !,
     _{ arguments:Args } :< Message,
     _{ variablesReference:VariablesRef } :< Args,
     forall(da_server_debugee_thread(ThreadId, _), thread_send_message(ThreadId, variables(RequestSeq, VariablesRef))).
-da_server_command("evaluate", RequestSeq, Message, _Out, _W, Seq, Seq) :-
+da_server_command("evaluate", RequestSeq, Message, _Out, Seq, Seq) :-
     !,
     _{ arguments  : Args } :< Message,
     _{ expression : SourceTerm,
@@ -492,7 +467,7 @@ da_server_command("evaluate", RequestSeq, Message, _Out, _W, Seq, Seq) :-
        context    : _Context
      } :< Args,
     forall(da_server_debugee_thread(ThreadId, _), thread_send_message(ThreadId, evaluate(RequestSeq, FrameId, SourceTerm))).
-da_server_command("setBreakpoints", RequestSeq, Message, Out, _W, Seq0, Seq) :-
+da_server_command("setBreakpoints", RequestSeq, Message, Out, Seq0, Seq) :-
     !,
     _{ arguments : Args } :< Message,
     _{ source      : DAPSource,
@@ -504,7 +479,7 @@ da_server_command("setBreakpoints", RequestSeq, Message, Out, _W, Seq0, Seq) :-
     maplist(prolog_dap_breakpoint, ResBreakpoints, DAPBreakpoints),
     dap_response(Out, Seq0, RequestSeq, "setBreakpoints", _{breakpoints:DAPBreakpoints}),
     succ(Seq0, Seq).
-da_server_command("setExceptionBreakpoints", RequestSeq, Message, Out, _W, Seq0, Seq) :-
+da_server_command("setExceptionBreakpoints", RequestSeq, Message, Out, Seq0, Seq) :-
     !,
     _{ arguments : Args    } :< Message,
     _{ filters   : Filters } :< Args,
@@ -516,7 +491,7 @@ da_server_command("setExceptionBreakpoints", RequestSeq, Message, Out, _W, Seq0,
         dap_response(Out, Seq0, RequestSeq, "setExceptionBreakpoints", _{breakpoints:[_{verified:true}]})
     ),
     succ(Seq0, Seq).
-da_server_command("setFunctionBreakpoints", RequestSeq, Message, Out, _W, Seq0, Seq) :-
+da_server_command("setFunctionBreakpoints", RequestSeq, Message, Out, Seq0, Seq) :-
     !,
     _{ arguments   : Args              } :< Message,
     _{ breakpoints : DAPReqBreakpoints } :< Args,
@@ -534,7 +509,7 @@ da_server_command("setFunctionBreakpoints", RequestSeq, Message, Out, _W, Seq0, 
              DAPBreakpoints),
     dap_response(Out, Seq0, RequestSeq, "setFunctionBreakpoints", _{breakpoints:DAPBreakpoints}),
     succ(Seq0, Seq).
-da_server_command("source", RequestSeq, Message, Out, _W, Seq0, Seq) :-
+da_server_command("source", RequestSeq, Message, Out, Seq0, Seq) :-
     !,
     _{ arguments : Args } :< Message,
     _{ sourceReference : SourceReference
@@ -548,7 +523,7 @@ da_server_command("source", RequestSeq, Message, Out, _W, Seq0, Seq) :-
     ;   dap_error(Out, Seq0, RequestSeq, "source", "Cannot provide source code for requested predicate")
     ),
     succ(Seq0, Seq).
-da_server_command(Command, RequestSeq, _Message, Out, _W, Seq0, Seq) :-
+da_server_command(Command, RequestSeq, _Message, Out, Seq0, Seq) :-
     format(string(ErrorMessage), "Command \"~w\" is not implemented", [Command]),
     dap_error(Out, Seq0, RequestSeq, Command, ErrorMessage),
     succ(Seq0, Seq).
@@ -605,15 +580,15 @@ da_server_capabilities(_{ supportsConfigurationDoneRequest  : true,
 da_initialized(_).
 
 
-:- det(da_launch/5).
-da_launch(Args, Out, W, Seq0, Seq) :-
+:- det(da_launch/4).
+da_launch(Args, Out, Seq0, Seq) :-
     _{ goal: "$run_in_terminal" } :< Args,
     !,
     thread_self(ServerThreadId),
     tcp_socket(ServerSocket),
     tcp_setopt(ServerSocket, reuseaddr),
     tcp_bind(ServerSocket, Port),
-    thread_create(da_terminal(ServerSocket, ServerThreadId, W), _PrologThreadId),
+    thread_create(da_terminal(ServerSocket, ServerThreadId), _PrologThreadId),
     number_string(Port, PortString),
     getenv('HOME', H),
     dap_request(Out, Seq0,
@@ -624,13 +599,13 @@ da_launch(Args, Out, W, Seq0, Seq) :-
                      args  : ["telnet",  "127.0.0.1", PortString]
                  }),
     succ(Seq0, Seq).
-da_launch(Args, _Out, W, Seq, Seq) :-
+da_launch(Args, _Out, Seq, Seq) :-
     _{ cwd: CWD, module: ModulePath, goal: GoalString } :< Args,
     !,
     cd(CWD),
     user:ensure_loaded(ModulePath),
     thread_self(ServerThreadId),
-    thread_create(da_debugee(ModulePath, GoalString, ServerThreadId, W), _PrologThreadId).
+    thread_create(da_debugee(ModulePath, GoalString, ServerThreadId), _PrologThreadId).
 
 
-da_attach(_Args, _Out, _W, Seq, Seq).
+da_attach(_Args, _Out, Seq, Seq).

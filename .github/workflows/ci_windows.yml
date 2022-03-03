@@ -1,0 +1,28 @@
+name: Windows CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Install SWI-Prolog for Windows
+        run: |
+          choco install -y swi-prolog
+          refreshenv
+      - uses: actions/checkout@v2
+
+      - name: Run Tests
+        shell: cmd
+        run: |
+          "C:\Program Files\swipl\bin\swipl.exe" -g "pack_install('.', [interactive(false)])" -t halt
+          "C:\Program Files\swipl\bin\swipl.exe" -g "[library(debug_adapter/main)]" -t halt -- -V
+          "C:\Program Files\swipl\bin\swipl.exe" -g "[library(debug_adapter/client)]" -g "dap_script([reqres(\"disconnect\"), event(\"exited\")])" -t halt
+          "C:\Program Files\swipl\bin\swipl.exe" test/server.pl

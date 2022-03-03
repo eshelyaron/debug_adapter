@@ -11,8 +11,13 @@
 :- thread_local dap_message/1.
 :- thread_local dap_seq/1.
 
+
 spawn_server(O, I, P) :-
-    process_create(path(swipl),
+    (   current_prolog_flag(windows, true)
+    ->  Path = 'C:\\Program Files\\swipl\\bin\\swipl.exe'
+    ;   Path = path(swipl)
+    ),
+    process_create(Path,
                    ['-g', '[library(debug_adapter/main)]', '-t', 'halt'],
                    [ stdin(pipe(O)),
                      stdout(pipe(I)),
@@ -82,9 +87,10 @@ dap_do(I, O, D            ) :-
     dap_do(I, O, D).
 
 dap_next(I, N) :-
-    wait_for_input([I], [I|_], 5),
+    debug(dap(client), "Reading", []),
     dap_read(I, R),
     _{ type : Type } :< R,
+    debug(dap(client), "Read ~w", [R]),
     (   Type == "response"
     ->  (   _{ seq: Seq, request_seq : ReqSeq, command : Command, success : Success } :< R,
             (   get_dict(message, R, Message)
