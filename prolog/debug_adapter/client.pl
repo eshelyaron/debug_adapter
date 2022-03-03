@@ -11,8 +11,13 @@
 :- thread_local dap_message/1.
 :- thread_local dap_seq/1.
 
+
 spawn_server(O, I, P) :-
-    process_create(path(swipl),
+    (   current_prolog_flag(windows, true)
+    ->  Path = 'C:\\Program Files\\swipl\\bin\\swipl.exe'
+    ;   Path = path(swipl)
+    ),
+    process_create(Path,
                    ['-g', '[library(debug_adapter/main)]', '-t', 'halt'],
                    [ stdin(pipe(O)),
                      stdout(pipe(I)),
