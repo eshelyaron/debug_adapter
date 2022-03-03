@@ -19,10 +19,6 @@ jobs:
 
       - uses: actions/checkout@v2
 
-      - name: Run Tests
-        run: |
-          swipl test/server.pl
-
       - name: Build pack
         run: |
           zip -r debug_adapter-`swipl -s pack.pl -g "version(V), writeln(V)" -t halt`.zip pack.pl prolog README.md
