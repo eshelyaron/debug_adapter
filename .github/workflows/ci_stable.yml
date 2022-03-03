@@ -22,4 +22,5 @@ jobs:
 
       - name: Run Tests
         run: |
+          swipl -g "pack_install('.', [interactive(false)])" -t halt
           swipl test/server.pl

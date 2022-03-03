@@ -2,6 +2,8 @@
 
 :- initialization(main, main).
 
+:- nodebug(dap(main)).
+
 :- use_module(server).
 
 main(Argv) :-

@@ -1,138 +1,108 @@
 :- module(
        da_client,
        [
-           dap_request_response/3,
-           dap_request_response/4,
-           dap_request_response/5,
-           dap_request_response/6,
-           dap_request_response/7,
-           dap_request_response/8,
-           dap_request_response/10,
-           dap_request_response/11,
-           dap_await_event/2,
-           dap_await_event/3,
-           dap_await_event/4,
-           dap_await_event/6
+           dap_script/1
        ]
    ).
 
+:- use_module(compat).
 :- use_module(protocol).
 
-dap_request_response(In, Out, Command) :-
-    setting(da_protocol:initial_request_seq, Seq),
-    dap_request_response(In, Out, Seq, Command).
+:- thread_local dap_message/1.
+:- thread_local dap_seq/1.
 
-dap_request_response(In, Out, Seq, Command) :-
-    dap_request_response(In, Out, Seq, Command, null).
+spawn_server(O, I, P) :-
+    process_create(path(swipl),
+                   ['-g', '[library(debug_adapter/main)]', '-t', 'halt'],
+                   [ stdin(pipe(O)),
+                     stdout(pipe(I)),
+                     process(P)
+                   ]),
+    set_stream(I, buffer(full)),
+    set_stream(I, newline(dos)),
+    set_stream(O, buffer(false)).
 
-dap_request_response(In, Out, Seq, Command, Arguments) :-
-    dap_request_response(In, Out, Seq, Command, Arguments, _).
+halt_server(O, I, P) :-
+    close(O),
+    close(I),
+    process_wait(P, Status, [timeout(0)]),
+    (   Status == timeout
+    ->  process_kill(P)
+    ;   true
+    ).
 
-dap_request_response(In, Out, Seq, Command, Arguments, Body) :-
-    dap_request_response(In, Out, Seq, Command, Arguments, _Events, Body).
+dap_script(S) :-
+    setup_call_cleanup(
+        (   spawn_server(O, I, P),
+            asserta(dap_seq(1))
+        ),
 
-dap_request_response(In, Out, Seq, Command, Arguments, Events, Body) :-
-    setting(da_protocol:default_request_timeout, Timeout),
-    dap_request_response(In, Out, Seq, Command, Arguments, Events, Body, Timeout).
+        maplist(dap_do(I, O), S),
 
-dap_request_response(In, Out, Seq, Command, Arguments, Events, Body, Timeout) :-
-    dap_request_response(In, Out, Seq, Command, Arguments, return, Events, Success, _Message, Body, Timeout),
-    Success == true.
-
-dap_request_response(In, Out, Seq, Command, Arguments, Events, Success, Message, Body, Timeout) :-
-    dap_request_response(In, Out, Seq, Command, Arguments, return, Events, Success, Message, Body, Timeout).
-
-:- meta_predicate dap_request_response(?, ?, ?, ?, ?, 2, ?, ?, ?, ?, ?).
-
-dap_request_response(In, Out, Seq, Command, Arguments, OnEventGoal, Events, Success, Message, Body, Timeout) :-
-    debug(dap(client), "Sending request ~w ~w ~w", [Seq, Command, Arguments]),
-    dap_request(Out, Seq, Command, Arguments),
-    dap_await_response(In, Seq, Command, OnEventGoal, Events, Success, Message, Body, Timeout).
-
-dap_await_response(In, Seq, Command, OnEventGoal, Events, Success, Message, Body, Timeout0) :-
-    debug(dap(client), "Awaiting response for another ~w seconds", [Timeout0]),
-    get_time(Time0),
-    wait_for_input([In], ReadyList, Timeout0),
-    get_time(Time),
-    (   ReadyList = []  % timeout occured
-    ->  Success = timeout
-    ;   Timeout is Timeout0 - (Time - Time0),
-        dap_read(In, R),
-        _{ type : Type} :< R,
-        (   Type == "response"
-        ->  (   _{ request_seq : Seq, command : Command, success : Success } :< R
-            ->  Events = [],
-                (   get_dict(message, R, Message)
-                ->  true
-                ;   Message = null
-                ),
-                (   get_dict(body, R, Body)
-                ->  true
-                ;   Body = null
-                ),
-                debug(dap(client), "Received response ~w ~w ~w ~w", [Seq, Success, Message, Body])
-            ;   dap_await_response(In, Seq, Command, OnEventGoal, Events, Success, Message, Body, Timeout)
-            )
-        ;   Type == "event"
-        ->  _{ seq : EventSeq0, event : EventType0 } :< R,
-            debug(dap(client), "Received event ~w ~w", [EventSeq0, EventType0]),
-            (   get_dict(body, R, EventBody0)
-            ->  true
-            ;   EventBody0 = null
-            ),
-            call(OnEventGoal, event(EventSeq0, EventType0, EventBody0), Events0),
-            append(Events0, EventsT, Events),
-            dap_await_response(In, Seq, Command, OnEventGoal, EventsT, Success, Message, Body, Timeout)
+        (   retractall(dap_message(_)),
+            retractall(dap_seq(_)),
+            halt_server(O, I, P)
         )
     ).
 
+dap_do(I, O, event(Type)  ) :-
+    dap_do(I, O, event(Type, _)), !.
+dap_do(_, _, event(Type, Body)) :-
+    dap_message(event(_, Type, Body)), !.
+dap_do(_, _, call(Goal)   ) :-
+    !,
+    call(Goal).
+dap_do(_, _, assertion(A) ) :-
+    !,
+    assertion(A).
+dap_do(I, O, request(Type)) :-
+    dap_do(I, O, request(Type, null)), !.
+dap_do(_, O, request(Type, Body)) :-
+    !,
+    dap_seq(Seq0),
+    !,
+    dap_request(O, Seq0, Type, Body),
+    Seq is Seq0 + 1,
+    asserta(dap_seq(Seq)).
+dap_do(I, O, reqres(Type)) :-
+    dap_do(I, O, reqres(Type, null)), !.
+dap_do(I, O, reqres(Type, Body)) :-
+    dap_do(I, O, reqres(Type, Body, _)), !.
+dap_do(I, O, reqres(Type, Body, Response)) :-
+    !,
+    dap_seq(ReqSeq),
+    !,
+    dap_do(I, O, request(Type, Body)),
+    dap_do(I, O, response(ReqSeq, Type, Response)).
+dap_do(_, _, response(ReqSeq, Type, Response)) :-
+    dap_message(response(_, ReqSeq, Type, true, _, Response)), !.
+dap_do(I, O, D            ) :-
+    dap_next(I, N),
+    asserta(dap_message(N)),
+    dap_do(I, O, D).
 
-dap_await_event(In, EventType) :-
-    dap_await_event(In, EventType, _).
-
-dap_await_event(In, EventType, EventBody) :-
-    dap_await_event(In, EventType, EventBody, 10).
-
-dap_await_event(In, EventType, EventBody, Timeout) :-
-    debug(dap(client), "Awaiting event of type ~w", [EventType]),
-    dap_await_event(In, =(event(_, EventType, EventBody)), _, _, true, Timeout).
-
-:- det(dap_await_event/6).
-dap_await_event(In, OnEventGoal, Events, Responses, Success, Timeout0) :-
-    debug(dap(client), "Awaiting event for another ~w seconds", [Timeout0]),
-    get_time(Time0),
-    wait_for_input([In], ReadyList, Timeout0),
-    get_time(Time),
-    Timeout is Timeout0 - (Time - Time0),
-    (   ReadyList = []  % timeout occured
-    ->  debug(dap(client), "Nothing to read from", []),
-        (   Timeout =< 0
-        ->  debug(dap(client), "Timed out while waiting for event", []),
-            Success = timeout
-        ;   debug(dap(client), "Spurious wakeup with ~w seconds remaining", [Timeout]),
-            dap_await_event(In, OnEventGoal, Events, Responses, Success, Timeout)
-        )
-    ;   debug(dap(client), "Read ready with ~w seconds remaining ", [Timeout]),
-        dap_read(In, R),
-        debug(dap(client), "Received message ~w while waiting for event ", [R]),
-        _{ type : Type} :< R,
-        (   Type == "response"
-        ->  debug(dap(client), "Received response", []),
-            Responses = [R|Responses1],
-            dap_await_event(In, OnEventGoal, Events, Responses1, Success, Timeout)
-        ;   Type == "event"
-        ->  _{ seq : EventSeq0, event : EventType0 } :< R,
-            debug(dap(client), "Received event ~w ~w", [EventSeq0, EventType0]),
-            (   get_dict(body, R, EventBody0)
+dap_next(I, N) :-
+    wait_for_input([I], [I|_], 5),
+    dap_read(I, R),
+    _{ type : Type } :< R,
+    (   Type == "response"
+    ->  (   _{ seq: Seq, request_seq : ReqSeq, command : Command, success : Success } :< R,
+            (   get_dict(message, R, Message)
             ->  true
-            ;   EventBody0 = null
+            ;   Message = null
             ),
-            (   call(OnEventGoal, event(EventSeq0, EventType0, EventBody0))
-            ->  Success = true
-            ;   Events = [R|Events1],
-                dap_await_event(In, OnEventGoal, Events1, Responses, Success, Timeout)
-            )
+            (   get_dict(body, R, Body)
+            ->  true
+            ;   Body = null
+            ),
+            N = response(Seq, ReqSeq, Command, Success, Message, Body)
+        )
+    ;   Type == "event"
+    ->  (   _{ seq : Seq, event : Event } :< R,
+            (   get_dict(body, R, Body)
+            ->  true
+            ;   Body = null
+            ),
+            N = event(Seq, Event, Body)
         )
     ).
-
-return(E, [E]).
