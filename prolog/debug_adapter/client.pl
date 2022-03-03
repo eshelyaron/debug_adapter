@@ -82,8 +82,10 @@ dap_do(I, O, D            ) :-
     dap_do(I, O, D).
 
 dap_next(I, N) :-
+    debug(dap(client), "Reading", []),
     dap_read(I, R),
     _{ type : Type } :< R,
+    debug(dap(client), "Read ~w", [R]),
     (   Type == "response"
     ->  (   _{ seq: Seq, request_seq : ReqSeq, command : Command, success : Success } :< R,
             (   get_dict(message, R, Message)
