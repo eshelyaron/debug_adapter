@@ -82,7 +82,6 @@ dap_do(I, O, D            ) :-
     dap_do(I, O, D).
 
 dap_next(I, N) :-
-    wait_for_input([I], [I|_], 5),
     dap_read(I, R),
     _{ type : Type } :< R,
     (   Type == "response"
