@@ -16,10 +16,7 @@ specification](https://microsoft.github.io/debug-adapter-protocol/specification)
 */
 
 
-:- if(\+current_predicate(det/1)).
-user:det(_).
-:- endif.
-
+:- use_module(compat).
 :- use_module(tracer).
 :- use_module(protocol).
 :- use_module(source).
@@ -631,6 +628,7 @@ da_launch(Args, _Out, W, Seq, Seq) :-
     _{ cwd: CWD, module: ModulePath, goal: GoalString } :< Args,
     !,
     cd(CWD),
+    user:ensure_loaded(ModulePath),
     thread_self(ServerThreadId),
     thread_create(da_debugee(ModulePath, GoalString, ServerThreadId, W), _PrologThreadId).
 
