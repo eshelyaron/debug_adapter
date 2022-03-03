@@ -1,8 +1,8 @@
 :- module(
        da_tracer,
        [
-           da_debugee/4,
-           da_terminal/3,
+           da_debugee/3,
+           da_terminal/2,
            da_tracer_trapping/0
        ]
    ).
@@ -23,16 +23,16 @@ user:prolog_trace_interception(Port, Frame, Choice, Action) :-
     notrace(da_trace_interception(Port, Frame, Choice, Action)),
     da_tracer_yield(Action).
 
-:- thread_local da_debugee_server/2.
+:- thread_local da_debugee_server/1.
 :- thread_local da_tracer_last_action/1.
 
 :- multifile prolog:open_source_hook/3.
 
 prolog:open_source_hook(Path, Stream, _Options) :-
-    (   da_debugee_server(ServerThreadId, ServerInterruptHandle)
+    (   da_debugee_server(ServerThreadId)
     ->  (   source_file(Path)
-        ->  da_debugee_emitted_message(loaded_source("new", Path), ServerThreadId, ServerInterruptHandle)
-        ;   da_debugee_emitted_message(loaded_source("changed", Path), ServerThreadId, ServerInterruptHandle)
+        ->  da_debugee_emitted_message(loaded_source("new", Path), ServerThreadId)
+        ;   da_debugee_emitted_message(loaded_source("changed", Path), ServerThreadId)
         )
     ;   true
     ),
@@ -43,8 +43,8 @@ prolog:open_source_hook(Path, Stream, _Options) :-
 % Keep the directive in a comment for reference.
 % :- meta_predicate da_debugee(?, 0, ?, ?).
 
-da_debugee(ModulePath, GoalString, ServerThreadId, ServerInterruptHandle) :-
-    da_debugee_emitted_message(thread_started, ServerThreadId, ServerInterruptHandle),
+da_debugee(ModulePath, GoalString, ServerThreadId) :-
+    da_debugee_emitted_message(thread_started, ServerThreadId),
     thread_get_message(_), % wait for a trigger from the server
     debug(dap(tracer), "starting debugee thread with source file ~w and goal ~w", [ModulePath, GoalString]),
     term_string(Goal, GoalString, [variable_names(VarNames)]),
@@ -57,27 +57,26 @@ da_debugee(ModulePath, GoalString, ServerThreadId, ServerInterruptHandle) :-
     ;   QGoal = Goal
     ),
     debug(dap(tracer), "debugee qualified goal ~w", [QGoal]),
-    da_trace(QGoal, VarNames, ServerThreadId, ServerInterruptHandle).
+    da_trace(QGoal, VarNames, ServerThreadId).
 
-da_debugee_emitted_message(Message, ServerThreadId, ServerInterruptHandle) :-
+da_debugee_emitted_message(Message, ServerThreadId) :-
     thread_self(DebugeePrologThreadId),
     thread_property(DebugeePrologThreadId, id(DebugeeSystemThreadId)),
-    thread_send_message(ServerThreadId, DebugeeSystemThreadId-Message),
-    da_server_interrupt(ServerInterruptHandle).
+    thread_send_message(ServerThreadId, DebugeeSystemThreadId-Message).
 
 
 da_server_interrupt(Handle) :-
     put_code(Handle, 3).
 
 
-:- meta_predicate da_trace(0, ?, ?, ?).
+:- meta_predicate da_trace(0, ?, ?).
 
-da_trace(Goal, VarNames, ServerThreadId, ServerInterruptHandle) :-
+da_trace(Goal, VarNames, ServerThreadId) :-
     debug(dap(tracer), "tracer setup", []),
-    da_tracer_setup(ServerThreadId, ServerInterruptHandle),
+    da_tracer_setup(ServerThreadId),
     da_tracer_top_level(Goal, VarNames, ExitCode),
     debug(dap(tracer), "tracer cleanup", []),
-    da_debugee_exited(ExitCode, ServerThreadId, ServerInterruptHandle).
+    da_debugee_exited(ExitCode, ServerThreadId).
 
 
 
@@ -114,13 +113,12 @@ da_tracer_top_level(Goal, VarNames, ExitCode) :-
          ).
 
 
-da_tracer_setup(ServerThreadId, ServerInterruptHandle) :-
-    asserta(da_debugee_server(ServerThreadId, ServerInterruptHandle)),
+da_tracer_setup(ServerThreadId) :-
+    asserta(da_debugee_server(ServerThreadId)),
     asserta(da_tracer_last_action(null)),
     asserta((user:thread_message_hook(Term, Kind, Lines) :-
                  da_debugee_emitted_message(output(Term, Kind, Lines),
-                                            ServerThreadId,
-                                            ServerInterruptHandle),
+                                            ServerThreadId),
                  false)),
     asserta((user:prolog_exception_hook(Ex, Out, Frame, Catcher) :-
                  da_exception_hook(Ex, Out, Frame, Catcher))),
@@ -137,10 +135,10 @@ da_exception_hook(_In, _Out, _Frame, _Catcher) :-
     trace,
     fail.
 
-da_terminal(ServerSocket, ServerThreadId, ServerInterruptHandle) :-
-    da_debugee_emitted_message(thread_started, ServerThreadId, ServerInterruptHandle),
+da_terminal(ServerSocket, ServerThreadId) :-
+    da_debugee_emitted_message(thread_started, ServerThreadId),
     da_terminal_setup(ServerSocket),
-    da_tracer_setup(ServerThreadId, ServerInterruptHandle),
+    da_tracer_setup(ServerThreadId),
     prolog.
 
 
@@ -162,10 +160,10 @@ da_terminal_setup(ServerSocket) :-
     set_stream(user_error, newline(dos)),
     set_prolog_flag(toplevel_prompt, '?- ').
 
-:- det(da_debugee_exited/3).
-da_debugee_exited(R, S, W) :-
-    da_debugee_emitted_message(thread_exited, S, W),
-    da_debugee_emitted_message(exited(R), S, W).
+:- det(da_debugee_exited/2).
+da_debugee_exited(R, S) :-
+    da_debugee_emitted_message(thread_exited, S),
+    da_debugee_emitted_message(exited(R), S).
 
 
 %! user:debugger_connection_template(-Template) is nondet.
@@ -199,18 +197,17 @@ da_debugee_exited(R, S, W) :-
 :- dynamic user:debugger_connection_template/1.
 
 da_trace_interception(Port, Frame, Choice, Action) :-
-    da_debugee_server(ServerThreadId, ServerInterruptHandle),
+    da_debugee_server(ServerThreadId),
     !,
     da_tracer_last_action(LastAction),
     !,
     retractall(da_tracer_last_action(_)),
     da_tracer_stopped_reason(Port, Frame, LastAction, Reason, Description, Text, BreakpointIds),
-    da_debugee_emitted_message(stopped(Reason, Description, Text, BreakpointIds), ServerThreadId, ServerInterruptHandle),
-    da_tracer_loop(Port, Frame, Choice, Action, ServerThreadId, ServerInterruptHandle).
+    da_debugee_emitted_message(stopped(Reason, Description, Text, BreakpointIds), ServerThreadId),
+    da_tracer_loop(Port, Frame, Choice, Action, ServerThreadId).
 da_trace_interception(Port, Frame, Choice, Action) :-
     user:debugger_connection_template(Template),
     !,
-    pipe(R, W),
     tcp_socket(ServerSocket),
     tcp_setopt(ServerSocket, reuseaddr),
     tcp_bind(ServerSocket, TCPPort),
@@ -221,17 +218,17 @@ da_trace_interception(Port, Frame, Choice, Action) :-
     tcp_open_socket(ClientSocket, InStream, OutStream),
     thread_self(Self0),
     thread_property(Self0, id(Self)),
-    thread_create(da_server([threads([Self-running]), in(InStream), out(OutStream), interrupt(R-W)]), ServerThreadId),
-    da_tracer_setup(ServerThreadId, W),
-    da_debugee_emitted_message(stopped("entry", null, null, null), ServerThreadId, W),
-    da_tracer_loop(Port, Frame, Choice, Action, ServerThreadId, W).
+    thread_create(da_server([threads([Self-running]), in(InStream), out(OutStream)]), ServerThreadId),
+    da_tracer_setup(ServerThreadId),
+    da_debugee_emitted_message(stopped("entry", null, null, null), ServerThreadId),
+    da_tracer_loop(Port, Frame, Choice, Action, ServerThreadId).
 
-:- det(da_tracer_loop/6).
-da_tracer_loop(Port, Frame, Choice, Action, ServerThreadId, ServerInterruptHandle) :-
+:- det(da_tracer_loop/5).
+da_tracer_loop(Port, Frame, Choice, Action, ServerThreadId) :-
     thread_get_message(Message),
-    da_tracer_handled_message(Message, Port, Frame, Choice, Action0, ServerThreadId, ServerInterruptHandle),
+    da_tracer_handled_message(Message, Port, Frame, Choice, Action0, ServerThreadId),
     (   Action0 == loop
-    ->  da_tracer_loop(Port, Frame, Choice, Action, ServerThreadId, ServerInterruptHandle)
+    ->  da_tracer_loop(Port, Frame, Choice, Action, ServerThreadId)
     ;   Action  = Action0
     ).
 
@@ -258,59 +255,59 @@ prolog_dap_stopped_reason(Port, _, Reason, null, null) :-
     functor(Port, Atom, _),
     atom_string(Atom, Reason).
 
-:- det(da_tracer_handled_message/7).
-da_tracer_handled_message(evaluate(RequestId, FrameId, SourceTerm), _Port, _Frame, _Choice, loop, S, W) :-
+:- det(da_tracer_handled_message/6).
+da_tracer_handled_message(evaluate(RequestId, FrameId, SourceTerm), _Port, _Frame, _Choice, loop, S) :-
     !,
     da_frame_evaluate(FrameId, SourceTerm, Result, Bindings),
-    da_debugee_emitted_message(evaluate(RequestId, Result, Bindings), S, W).
-da_tracer_handled_message(stack_trace(RequestId), Port, Frame, Choice, loop, S, W) :-
+    da_debugee_emitted_message(evaluate(RequestId, Result, Bindings), S).
+da_tracer_handled_message(stack_trace(RequestId), Port, Frame, Choice, loop, S) :-
     !,
     da_stack_frame_at_port(Frame, Port, Choice, ActiveFrame),
     da_stack_trace(Frame, StackTrace),
-    da_debugee_emitted_message(stack_trace(RequestId, [ActiveFrame|StackTrace]), S, W).
-da_tracer_handled_message(step_in_targets(RequestId, FrameId), _Port, Frame, Choice, loop, S, W) :-
+    da_debugee_emitted_message(stack_trace(RequestId, [ActiveFrame|StackTrace]), S).
+da_tracer_handled_message(step_in_targets(RequestId, FrameId), _Port, Frame, Choice, loop, S) :-
     !,
     da_frame_step_in_targets(FrameId, Frame, Choice, Targets),
-    da_debugee_emitted_message(step_in_targets(RequestId, Targets), S, W).
-da_tracer_handled_message(scopes(RequestId, FrameId), Port, ActiveFrameId, _Choice, loop, S, W) :-
+    da_debugee_emitted_message(step_in_targets(RequestId, Targets), S).
+da_tracer_handled_message(scopes(RequestId, FrameId), Port, ActiveFrameId, _Choice, loop, S) :-
     !,
     da_frame_scopes(FrameId, ActiveFrameId, Port, Scopes),
-    da_debugee_emitted_message(scopes(RequestId, Scopes), S, W).
-da_tracer_handled_message(variables(RequestId, VariablesRef), _Port, _Frame, _Choice, loop, S, W) :-
+    da_debugee_emitted_message(scopes(RequestId, Scopes), S).
+da_tracer_handled_message(variables(RequestId, VariablesRef), _Port, _Frame, _Choice, loop, S) :-
     !,
     da_referenced_variables(VariablesRef, Variables),
-    da_debugee_emitted_message(variables(RequestId, Variables), S, W).
-da_tracer_handled_message(exception_info(RequestId), exception(Exception), _Frame, _Choice, loop, S, W) :-
+    da_debugee_emitted_message(variables(RequestId, Variables), S).
+da_tracer_handled_message(exception_info(RequestId), exception(Exception), _Frame, _Choice, loop, S) :-
     !,
-    da_debugee_emitted_message(exception_info(RequestId, Exception), S, W).
-da_tracer_handled_message(step_in(0), _Port, _Frame, _Choice, continue, S, W) :-
+    da_debugee_emitted_message(exception_info(RequestId, Exception), S).
+da_tracer_handled_message(step_in(0), _Port, _Frame, _Choice, continue, S) :-
     !,
-    da_debugee_emitted_message(continued, S, W),
+    da_debugee_emitted_message(continued, S),
     asserta(da_tracer_last_action(step_in)).
-da_tracer_handled_message(step_in(1), _Port, _Frame, _Choice, fail, S, W) :-
+da_tracer_handled_message(step_in(1), _Port, _Frame, _Choice, fail, S) :-
     !,
-    da_debugee_emitted_message(continued, S, W),
+    da_debugee_emitted_message(continued, S),
     asserta(da_tracer_last_action(step_in)).
-da_tracer_handled_message(step_out, _Port, _Frame, _Choice, up, S, W) :-
+da_tracer_handled_message(step_out, _Port, _Frame, _Choice, up, S) :-
     !,
-    da_debugee_emitted_message(continued, S, W),
+    da_debugee_emitted_message(continued, S),
     asserta(da_tracer_last_action(step_out)).
-da_tracer_handled_message(disconnect, _Port, _Frame, _Choice, nodebug, S, W) :-
+da_tracer_handled_message(disconnect, _Port, _Frame, _Choice, nodebug, S) :-
     !,
-    da_debugee_emitted_message(continued, S, W),
+    da_debugee_emitted_message(continued, S),
     asserta(da_tracer_last_action(disconnect)).
-da_tracer_handled_message(continue, _Port, _Frame, _Choice, continue, S, W) :-
+da_tracer_handled_message(continue, _Port, _Frame, _Choice, continue, S) :-
     !,
-    da_debugee_emitted_message(continued, S, W),
+    da_debugee_emitted_message(continued, S),
     asserta(da_tracer_last_action(continue)).
-da_tracer_handled_message(restart_frame(FrameId), _Port, _Frame, _Choice, retry(FrameId), _S, _W) :-
+da_tracer_handled_message(restart_frame(FrameId), _Port, _Frame, _Choice, retry(FrameId), _S) :-
     !,
     asserta(da_tracer_last_action(restart_frame)).
-da_tracer_handled_message(next, _Port, _Frame, _Choice, skip, S, W) :-
+da_tracer_handled_message(next, _Port, _Frame, _Choice, skip, S) :-
     !,
-    da_debugee_emitted_message(continued, S, W),
+    da_debugee_emitted_message(continued, S),
     asserta(da_tracer_last_action(next)).
-da_tracer_handled_message(configuration_done, _, _, _, loop, _, _).
+da_tracer_handled_message(configuration_done, _, _, _, loop, _).
 
 
 %! da_tracer_yield(TracerAction) is det.
