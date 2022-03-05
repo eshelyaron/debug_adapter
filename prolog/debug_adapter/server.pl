@@ -264,13 +264,6 @@ da_server_handle_debugee_message(DebugeeThreadId,
     ;   true
     ).
 
-prolog_dap_step_in_target(step_in_target(Id, null), _{ id    : Id,
-                                                       label : "step"
-                                                     }) :- !.
-prolog_dap_step_in_target(step_in_target(Id, _Alt), _{ id    : Id,
-                                                       label : "fail"
-                                                     }).
-
 safe_thread_send_message(ThreadId, disconnect) :-
     catch(thread_send_message(ThreadId, disconnect), Catcher, true),
     expected_error(ThreadId, Catcher).
@@ -278,6 +271,14 @@ safe_thread_send_message(ThreadId, disconnect) :-
 
 expected_error(ThreadId, error(existence_error(thread, ThreadId), _)) :- !.
 expected_error(ThreadId, error(type_error(thread, ThreadId), _)).
+
+
+prolog_dap_step_in_target(step_in_target(Id, null), _{ id    : Id,
+                                                       label : "step"
+                                                     }) :- !.
+prolog_dap_step_in_target(step_in_target(Id, _Alt), _{ id    : Id,
+                                                       label : "fail"
+                                                     }).
 
 
 prolog_dap_scope(scope(Name, VariablesRef, SourceSpan),

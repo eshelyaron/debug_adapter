@@ -24,7 +24,7 @@ Now run `M-x dap-debug` in a Prolog buffer and have fun.
 Most of the DAP specification is implemented and [operational](https://github.com/eshelyaron/debug_adapter/blob/main/gallery.md).
 For the status of specific features, see below.
 
-For information about recent changes and additions, see [NEWS.md](NEWS.md).
+For information about recent changes and additions, see [NEWS.md](https://github.com/eshelyaron/debug_adapter/blob/main/NEWS.md).
 
 Currently only tested with GNU Emacs and `dap-mode` until we have a VS Code extension.
 
@@ -36,7 +36,7 @@ server.
 
 | Event          | Description                                                 | Status |
 |----------------|-------------------------------------------------------------|--------|
-| Breakpoint     | information about a breakpoint has changed                  | ✅     |
+| Breakpoint     | the status of a breakpoint has changed                      | ✅     |
 | Capabilities   | one or more capabilities have changed                       |        |
 | Continued      | the execution of the debuggee has continued                 | ✅     |
 | Exited         | the debuggee has exited and returns its exit code           | ✅     |
