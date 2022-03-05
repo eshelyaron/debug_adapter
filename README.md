@@ -36,7 +36,7 @@ server.
 
 | Event          | Description                                                 | Status |
 |----------------|-------------------------------------------------------------|--------|
-| Breakpoint     | information about a breakpoint has changed                  |        |
+| Breakpoint     | information about a breakpoint has changed                  | ✅     |
 | Capabilities   | one or more capabilities have changed                       |        |
 | Continued      | the execution of the debuggee has continued                 | ✅     |
 | Exited         | the debuggee has exited and returns its exit code           | ✅     |
