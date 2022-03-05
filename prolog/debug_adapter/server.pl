@@ -24,6 +24,9 @@ specification](https://microsoft.github.io/debug-adapter-protocol/specification)
 :- use_module(breakpoint).
 
 
+:- dynamic dap_server_thread_id/1.
+
+
 :- predicate_options(da_server/1, 1, [ in(+stream),
                                        out(+stream),
                                        threads(+list(pair))
@@ -51,22 +54,42 @@ da_server(Options) :-
     set_stream(In, representation_errors(error)),
     set_stream(In, tty(false)),
     thread_self(Self),
+    asserta(dap_server_thread_id(Self)),
     thread_create(stream_forward(In, Self), _, []),
     set_stream(Out, buffer(false)),
     set_stream(Out, tty(false)),
     option(threads(Threads), Options, []),
     forall(member(T-S, Threads), asserta(da_server_debugee_thread(T, S))),
+    prolog_listen(break, da_handle_break_event, [as(last), name(da_server)]),
     da_server_loop(1, Out).
 
 :- thread_local da_server_debugee_thread/2.
 :- thread_local da_server_disconnecting/0.
+:- thread_local da_server_disconnected/0.
+
+
+da_handle_break_event(gc, ClauseRef, PC) :-
+    da_server:dap_server_thread_id(ServerThreadId),
+    !,
+    thread_self(PrologThreadId),
+    thread_property(PrologThreadId, id(ThreadId)),
+    thread_send_message(ServerThreadId, ThreadId-breakpoint_removed(ClauseRef, PC)).
+
+
+da_mock_break_event(_, _, _) :- fail.
+
 
 :- det(da_server_loop/2).
+da_server_loop(Seq, Out) :-
+    da_server_disconnected,
+    !,
+    dap_event(Out, Seq, "exited", _{exitCode:0}),
+    retractall(dap_server_thread_id(_)),
+    prolog_listen(break, da_mock_break_event, [as(last), name(da_server)]),
+    thread_exit(0).
 da_server_loop(Seq0, Out) :-
-    debug(dap(server), "waiting for a message", []),
     thread_get_message(M),
     da_server_handle(M, Seq0, Seq, Out),
-    debug(dap(server), "handled ~w", [M]),
     da_server_loop(Seq, Out).
 
 da_server_handle(DebugeeThreadId-Message, Seq0, Seq, Out) :-
@@ -86,12 +109,10 @@ da_server_handle(stream(_, Message0), Seq0, Seq, Out) :-
 
 
 stream_forward(S, T) :-
-    debug(dap(server), "waiting", []),
     dap_read(S, Message),
-    debug(dap(server), "forwarding ~w to ~w", [Message, T]),
     thread_send_message(T, stream(S, Message)),
     (   get_dict(command, Message, "disconnect")
-    ->  debug(dap(server), "bye", [])
+    ->  true
     ;   stream_forward(S, T)
     ).
 
@@ -109,6 +130,19 @@ da_server_handle_debugee_message(_DebugeeThreadId,
                                           }
              ),
     succ(Seq0, Seq).
+da_server_handle_debugee_message(_DebugeeThreadId,
+                                 breakpoint_removed(ClauseRef, PC),
+                                 Out, Seq0, Seq) :-
+    !,
+    (   retract(da_breakpoint:da_known_breakpoint(BP, ClauseRef, PC, _, _, _, _))
+    ->  dap_event(Out, Seq0, "breakpoint", _{ reason     : "removed",
+                                              breakpoint : _{ id       : BP,
+                                                              verified : false
+                                                            }
+                                            }),
+        succ(Seq0, Seq)
+    ;   Seq = Seq0
+    ).
 da_server_handle_debugee_message(DebugeeThreadId,
                                  stopped(Reason, Description, Text, BreakpointIds),
                                  Out, Seq0, Seq) :-
@@ -209,8 +243,7 @@ da_server_handle_debugee_message(DebugeeThreadId,
     succ(Seq0, Seq),
     retract(da_server_debugee_thread(DebugeeThreadId, _)),
     (   da_server_disconnecting, \+ da_server_debugee_thread(_, _)
-    ->  dap_event(Out, Seq, "exited", _{exitCode:0}),
-        thread_exit(0)
+    ->  asserta(da_server_disconnected)
     ;   true
     ).
 da_server_handle_debugee_message(DebugeeThreadId,
@@ -438,8 +471,7 @@ da_server_command("disconnect", RequestSeq, _Message, Out, Seq0, Seq) :-
     dap_response(Out, Seq0, RequestSeq, "disconnect"),
     succ(Seq0, Seq),
     (   \+ da_server_debugee_thread(_, _)
-    ->  dap_event(Out, Seq, "exited", _{exitCode:0}),
-        thread_exit(0)
+    ->  asserta(da_server_disconnected)
     ;   true
     ).
 da_server_command("restartFrame", RequestSeq, Message, Out, Seq0, Seq) :-

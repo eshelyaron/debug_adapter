@@ -178,5 +178,49 @@ script(stepInTargets) :-
     reqres("disconnect"),
     event("exited").
 
+script(breakpointCGC) :-
+    reqres("initialize"),
+    call(cwd(CWD)),
+    reqres("launch", _{ cwd    : CWD,
+                        module : "./target/reload.pl",
+                        goal   : "this_predicate"
+                      }),
+    event("initialized"),
+    reqres("setBreakpoints",
+           _{ breakpoints    : [_{line : 2}],
+              lines          : [2],
+              source         : _{ name : "reload.pl",
+                                  path : "./target/reload.pl"
+                                },
+              sourceModified : false
+            },
+           _{ breakpoints : [ _{ column    : 4,
+                                 endColumn : _,
+                                 endLine   : _,
+                                 id        : 1,
+                                 line      : 2,
+                                 message   : null,
+                                 source    : _{ name   : "reload.pl",
+                                                origin : "Static",
+                                                path   : _Path
+                                              },
+                                 verified  : true
+                               }
+                            ]
+            }),
+    reqres("configurationDone"),
+    event("stopped", _{description:_, hitBreakpointIds:_, reason:"entry", text:_, threadId:Id}),
+    reqres("stepIn", _{threadId: Id}),
+    reqres("stepIn", _{threadId: Id}),
+    reqres("next", _{threadId: Id}),
+    reqres("stepIn", _{threadId: Id}),
+    reqres("next", _{threadId: Id}),
+    reqres("stepIn", _{threadId: Id}),
+    reqres("next", _{threadId: Id}),
+    event("breakpoint", _{reason:"removed", breakpoint: _{ id: 1, verified: false }}),
+    reqres("disconnect"),
+    event("exited").
+
+
 
 :- end_tests(server).

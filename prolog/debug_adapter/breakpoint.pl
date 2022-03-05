@@ -61,7 +61,7 @@ da_breakpoints_set(path(Path), Req, Res) :-
 
 
 da_breakpoint_delete(BP) :-
-    ignore(prolog_breakpoints:delete_breakpoint(BP)),
+    catch(ignore(prolog_breakpoints:delete_breakpoint(BP)), _, true),
     retractall(da_known_breakpoint(BP, _, _, _, _, _, _)).
 
 
