@@ -1,3 +1,69 @@
+# What's new in SWI-Prolog Debug Adapter version 0.6.3
+
+The following changes were introduced since version 0.6.0 of the
+`debug_adapter` package:
+
+## MS Windows Compatibility
+
+In versions 0.6.0 and before, `debug_adapter` relied on Unix-specific
+features for some of its I/O tasks, namely:
+
+* The DAP server thread used
+  [`wait_for_input/3`](https://www.swi-prolog.org/pldoc/man?predicate=wait_for_input/3)
+  on the stdin stream to wait for input from the DAP client, and
+* [`pipe/2`](https://www.swi-prolog.org/pldoc/man?predicate=pipe/2) was used for some inter-thread/process communication.
+
+These features are not available on MS Windows, rendering previous
+versions `debug_adapter` not compatible with the platform.
+
+Version 0.6.2 of the `debug_adapter` package thus included an uverhaul
+of the DAP server's stdin listening implementation so to alleviate the
+reliance on Unix-specific features and allow the `debug_adapter` to
+run smoothly (also) on MS Windows.
+
+A Windows host was also added as a target for runnning the automated
+test-suite in CI.
+
+## Reporting and reseting breakpoints removed during source code reload
+
+The [SWI-Prolog
+manual](https://www.swi-prolog.org/pldoc/man?section=loadrunningcode)
+states that:
+
+> Traditionally, Prolog environments allow for reloading files holding
+> currently active code. In particular, the following sequence is a
+> valid use of the development environment:
+>
+>  * Trace a goal
+>  * Find unexpected behaviour of a predicate
+>  * Enter a _break_ using the **b** command
+>  * Fix the sources and reload them using [`make/0`](https://www.swi-prolog.org/pldoc/man?predicate=make/0)
+>  * Exit the break, _retry_ executing the now fixed predicate using the **r** command
+
+This flow is of course fully supported by the `debug_adapter` package,
+but what if we want to change this flow slightly, and instead of
+starting out tracing a goal from the top, we want to set a breakpoint
+somewhere down the road to be triggered at some point in our program's
+execution, and only then start the trace-edit-make-retry loop?
+
+Sounds straightforward enough, but there's a problem - SWI-Prolog does
+not preserve breakpoints when reloading source code. This is not
+surprising since breakpoints are internally attached to specific
+clauses, and clauses are replaced garbage collected by
+[`garbage_collect_clauses/0`](https://www.swi-prolog.org/pldoc/man?predicate=garbage_collect_clauses/0)
+after reloading relevant source file. This means that the next time
+our program reaches the point were we previously set our breakpoint,
+it may already not be present since reloading the source file. Even if
+the source code wasn't changed, reloading will eventually replace the
+file's clauses with fresh variants.
+
+In order to deal with this problem and fully support the
+aforementioned break-edit-make-retry workflow, version 0.6.3 of the
+`debug_adapter` package now detects breakpoints that are removed due
+to clause garbage collection and reports this information back to the
+client IDE via a DAP `breakpoint` event with `reason : "removed"`.
+
+
 # What's new in SWI-Prolog Debug Adapter version 0.6.0
 
 The following changes were introduced since version 0.5.0 of the
