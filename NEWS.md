@@ -47,15 +47,15 @@ somewhere down the road to be triggered at some point in our program's
 execution, and only then start the trace-edit-make-retry loop?
 
 Sounds straightforward enough, but there's a problem - SWI-Prolog does
-not preserve breakpoints when reloading source code. This is not
-surprising since breakpoints are internally attached to specific
-clauses, and clauses are replaced garbage collected by
+not preserve breakpoints when reloading source code. This should not
+come as a surprise since breakpoints are internally attached to
+specific clauses, and clauses are garbage collected by
 [`garbage_collect_clauses/0`](https://www.swi-prolog.org/pldoc/man?predicate=garbage_collect_clauses/0)
-after reloading relevant source file. This means that the next time
-our program reaches the point were we previously set our breakpoint,
-it may already not be present since reloading the source file. Even if
-the source code wasn't changed, reloading will eventually replace the
-file's clauses with fresh variants.
+after the relevant source files are reloaded. This means that the next
+time our program reaches the point where we previously set our
+breakpoint, it may already not be present in case that the source file
+has been reloaded. Even if the source code wasn't changed, reloading
+will eventually replace the file's clauses with fresh variants.
 
 In order to deal with this problem and fully support the
 aforementioned break-edit-make-retry workflow, version 0.6.3 of the
