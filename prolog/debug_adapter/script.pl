@@ -3,7 +3,8 @@
 :- use_module(session).
 
 run_script(Path, Options) :-
-    option(server_executable(Exec), Options, path(swipl)),
+    swipl_executable(Swipl),
+    option(server_executable(Exec), Options, Swipl),
     option(server_cli_args(Args), Options, ['-g', '[library(debug_adapter/main)]', '-t', 'halt']),
     option(bindings(Vars), Options, []),
     setup_call_cleanup(open(Path, read, In),
@@ -55,3 +56,9 @@ execute_part(reverse, Type:Body, Session0, Session) :-
     !, session_reverse_request(Type, Body, Session0, Session), !.
 execute_part(reverse, Type, Session0, Session) :-
     !, session_reverse_request(Type, _, Session0, Session), !.
+
+
+swipl_executable('C:\\Program Files\\swipl\\bin\\swipl.exe') :-
+    current_prolog_flag(windows, true),
+    !.
+swipl_executable(path(swipl)).
