@@ -1,0 +1,39 @@
+request :- initialize ;
+           launch: _{ cwd    : WD,
+                      module : "./target/breakpoint.pl",
+                      goal   : bp
+                    }.
+event   :- initialized.
+request :- setBreakpoints: _{ breakpoints    : [_{line : 8}],
+                              lines          : [8],
+                              source         : _{ name : "breakpoint.pl",
+                                                  path : "./target/breakpoint.pl"
+                                                },
+                              sourceModified : false }
+           ->
+           true: _{breakpoints : [_{ column    : 4,
+                                     endColumn : 17,
+                                     endLine   : 8,
+                                     id        : 1,
+                                     line      : 8,
+                                     message   : null,
+                                     source    : _{ name   : "breakpoint.pl",
+                                                    origin : "Static",
+                                                    path   : _
+                                                  },
+                                     verified  : true
+                                   }]}.
+request :- configurationDone.
+event   :- stopped: _{description      : _,
+                      hitBreakpointIds : _,
+                      reason           : "entry",
+                      text             : _,
+                      threadId         : Id}.
+request :- continue: _{threadId: Id}.
+event   :- stopped: _{description      : _,
+                      hitBreakpointIds : [1],
+                      reason           : "breakpoint",
+                      text             : _,
+                      threadId         : Id}.
+request :- disconnect.
+event   :- exited.

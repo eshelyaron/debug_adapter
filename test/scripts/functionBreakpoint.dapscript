@@ -1,0 +1,15 @@
+request :- initialize ;
+           launch: _{ cwd    : WD,
+                      module : "./target/breakpoint.pl",
+                      goal   : bp
+                    }.
+event   :- initialized.
+request :- setFunctionBreakpoints: _{ breakpoints : [_{name : "is_a/2"}] }
+           ->
+           true: _{breakpoints : [_{verified : true}] }.
+request :- configurationDone.
+event   :- stopped:< _{ threadId : Id, reason : "entry"}.
+request :- continue: _{ threadId : Id }.
+event   :- stopped:< _{ threadId : Id, reason : "function breakpoint"}.
+request :- disconnect.
+event   :- exited.

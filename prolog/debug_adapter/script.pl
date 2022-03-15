@@ -1,0 +1,57 @@
+:- module(da_script, [run_script/2]).
+
+:- use_module(session).
+
+run_script(Path, Options) :-
+    option(server_executable(Exec), Options, path(swipl)),
+    option(server_cli_args(Args), Options, ['-g', '[library(debug_adapter/main)]', '-t', 'halt']),
+    option(bindings(Vars), Options, []),
+    setup_call_cleanup(open(Path, read, In),
+                       setup_call_cleanup(session_start([Exec|Args], Session),
+                                          run_script_from_stream(In, Vars, Session),
+                                          session_stop(Session)),
+                       close(In)).
+
+run_script_from_stream(In, Vars0, Session) :-
+    read_term(In, Term, [variable_names(Vars1)]),
+    unify_vars(Vars1, Vars0, Vars),
+    execute_term(Term, In, Vars, Session).
+
+unify_vars([], Vars, Vars).
+unify_vars([H|T], Vars, Vars) :-
+    memberchk(H, Vars), !,
+    unify_vars(T, Vars, Vars).
+unify_vars([H|T], Vars, [H|Vars]) :-
+    unify_vars(T, Vars, Vars).
+
+execute_term(end_of_file, _, _, _).
+execute_term(?- Goal, In, Vars, Session) :-
+    Goal,
+    run_script_from_stream(In, Vars, Session).
+execute_term(Kind :- Body, In, Vars, Session0) :-
+    semicolon_list(Body, Parts),
+    foldl(execute_part(Kind), Parts, Session0, Session),
+    run_script_from_stream(In, Vars, Session).
+
+execute_part(request, (Type:Req -> Res), Session0, Session) :-
+    !, session_request_response(Type, Req, Res, Session0, Session).
+execute_part(request, (Type -> Res), Session0, Session) :-
+    !, session_request_response(Type, null, Res, Session0, Session).
+execute_part(request, (Type:Req *-> Success:Res0), Session0, Session) :-
+    !, session_request_response(Type, Req, Success:Res, Session0, Session), Res0 >:< Res.
+execute_part(request, (Type *-> Success:Res0), Session0, Session) :-
+    !, session_request_response(Type, null, Success:Res, Session0, Session), Res0 >:< Res.
+execute_part(request, (Type:Req), Session0, Session) :-
+    !, session_request_response(Type, Req, _, Session0, Session).
+execute_part(request, Type, Session0, Session) :-
+    !, session_request_response(Type, null, _, Session0, Session).
+execute_part(event, Type:Body, Session0, Session) :-
+    !, session_event(Type, Body, Session0, Session), !.
+execute_part(event, Type:<Body0, Session0, Session) :-
+    !, session_event(Type, Body, Session0, Session), Body0 >:< Body, !.
+execute_part(event, Type, Session0, Session) :-
+    !, session_event(Type, _, Session0, Session), !.
+execute_part(reverse, Type:Body, Session0, Session) :-
+    !, session_reverse_request(Type, Body, Session0, Session), !.
+execute_part(reverse, Type, Session0, Session) :-
+    !, session_reverse_request(Type, _, Session0, Session), !.

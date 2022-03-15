@@ -23,7 +23,7 @@ main(Argv) :-
        help('Print usage information')
       ],
       [opt(debug),
-       default(true),
+       default(false),
        type(boolean),
        shortflags([d]),
        longflags([debug]),
