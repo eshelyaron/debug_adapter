@@ -11,6 +11,7 @@ cwd(CWD) :-
     file_directory_name(ThisFile, CWD).
 
 :- use_module(library(debug_adapter/client)).
+:- use_module(library(debug_adapter/script)).
 
 
 user:term_expansion((script(Name) :- Body),
@@ -221,6 +222,7 @@ script(breakpointCGC) :-
     reqres("disconnect"),
     event("exited").
 
-
+test(scripts, [forall((cwd(CWD), directory_member(CWD, Path, [recursive(true), extensions([dapscript])])))]) :-
+    run_script(Path, [bindings(['WD'=CWD])]).
 
 :- end_tests(server).
