@@ -76,18 +76,32 @@ da_server_loop(O, Q, C, Seq0, State0) :-
 da_server_handle(Out, _, _, action(Action), Seq0, Seq, State, State) :-
     !,
     da_server_perform_action(Out, Action, Seq0, Seq).
-da_server_handle(_, Q, CB, stream(Message), Seq, Seq, State0, State) :-
+da_server_handle(Out, Q, CB, stream(Message), Seq0, Seq, State0, State) :-
     !,
     _{ type : "request",
        seq  : RequestSeq,
-       command : Command0,
-       arguments : Arguments } :< Message,
+       command : Command0
+     } :< Message,
     atom_string(Command, Command0),
-    call(CB, Command, Arguments, RequestSeq, Q, State0, State).
+    (   get_dict(arguments, Message, Arguments)
+    ->  true
+    ;   Arguments = null
+    ),
+    debug(dap(server), "Calling cb", []),
+    (   call(CB, Command, Arguments, RequestSeq, Q, State0, State)
+    ->  Seq = Seq0
+    ;   State = State0,
+        dap_error(Out, Seq0, RequestSeq, Command, "Bad request"),
+        Seq is Seq0 + 1
+    ).
 
 da_server_perform_action(Out, response(ReqSeq, Type, Body), Seq0, Seq) :-
     !,
     dap_response(Out, Seq0, ReqSeq, Type, Body),
+    Seq is Seq0 + 1.
+da_server_perform_action(Out, error(ReqSeq, Type, Body), Seq0, Seq) :-
+    !,
+    dap_error(Out, Seq0, ReqSeq, Type, Body),
     Seq is Seq0 + 1.
 da_server_perform_action(Out, event(Type, Body), Seq0, Seq) :-
     !,

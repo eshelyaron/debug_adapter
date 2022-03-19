@@ -223,6 +223,7 @@ user:term_expansion((script(Name) :- Body),
 %%     event("exited").
 
 test(scripts, [forall((cwd(CWD), directory_member(CWD, Path, [recursive(true), extensions([dapscript])])))]) :-
+    debug(dap(test), "Running dapscript ~w", [Path]),
     run_script(Path, [bindings(['WD'=CWD])]).
 
 :- end_tests(server).

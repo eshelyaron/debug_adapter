@@ -2,9 +2,9 @@ request :- initialize.
 event   :- initialized.
 request :- configurationDone.
 request :- launch   :  _{ cwd : WD, module : "./target/foo.pl", goal : "foo" }.
-event   :- thread   :  _{ threadId : Id, reason : "started" } ;
-           stopped  :< _{ threadId : Id, reason : "entry"}.
-request :- continue :  _{ threadId : Id }.
+event   :- stopped.
+request :- threads -> true: _{threads: [_{id: Id, name: _}]} ;
+           continue :  _{ threadId : Id }.
 event   :- continued:< _{ threadId : Id }.
 request :- disconnect.
 event   :- exited.

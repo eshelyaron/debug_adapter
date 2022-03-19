@@ -6,6 +6,7 @@
    ).
 
 :- use_module(library(debug_adapter/sdk)).
+:- use_module(library(debug_adapter/stack)).
 
 
 swipl_debug_adapter_command_callback(disconnect, _Arguments, ReqSeq, Handle, [], disconnected) :-
@@ -40,17 +41,37 @@ swipl_debug_adapter_command_callback(launch, Arguments, ReqSeq, Handle, configur
     debug(dap(swipl), "Launching ~w", [Arguments]),
     swipl_debug_adapter_launch_thread(Arguments, Handle, Thread),
     da_sdk_response(Handle, ReqSeq, launch).
+swipl_debug_adapter_command_callback(configurationDone, _Arguments, ReqSeq, Handle, configured(Threads), configured(Threads)) :-
+    !,
+    da_sdk_response(Handle, ReqSeq, configurationDone).
+swipl_debug_adapter_command_callback(threads, _Arguments, ReqSeq, Handle, configured(Threads), configured(Threads)) :-
+    !,
+    debug(dap(swipl), "Handling threads request", []),
+    maplist(number_string, Threads, Names),
+    maplist([I,N,_{id:I,name:N}]>>true, Threads, Names, Ts),
+    da_sdk_response(Handle, ReqSeq, threads, _{threads:Ts}).
+swipl_debug_adapter_command_callback(stackTrace, Arguments, ReqSeq, _Handle, configured(Threads0), configured(Threads)) :-
+    !,
+    debug(dap(swipl), "Handling stackTrace request", []),
+    _{ threadId : ThreadId } :< Arguments,
+    select(ThreadId, Threads0, Threads1),
+    catch((thread_send_message(ThreadId, stack_trace(ReqSeq)), Threads = Threads0),
+          _,
+          Threads = Threads1).
 swipl_debug_adapter_command_callback(disconnect, _Arguments, ReqSeq, Handle, configured(Threads), disconnected) :-
     !,
     debug(dap(swipl), "disconnecting", []),
-    maplist([T]>>thread_send_message(T, disconnect), Threads),
+    maplist([T]>>catch(thread_send_message(T, disconnect), _, true), Threads),
     da_sdk_response(Handle, ReqSeq, disconnect),
     da_sdk_event(Handle, exited),
     da_sdk_stop(Handle).
-swipl_debug_adapter_command_callback(continue, Arguments, ReqSeq, Handle, State, State) :-
+swipl_debug_adapter_command_callback(continue, Arguments, ReqSeq, Handle, configured(Threads), configured(Threads)) :-
     !,
     _{ threadId : ThreadId } :< Arguments,
-    thread_send_message(ThreadId, continue),
+    select(ThreadId, Threads0, Threads1),
+    catch((thread_send_message(ThreadId, continue), Threads = Threads0),
+          _,
+          Threads = Threads1),
     da_sdk_response(Handle, ReqSeq, continue).
 
 
@@ -68,14 +89,15 @@ swipl_debug_adapter_capabilities(_{ supportsConfigurationDoneRequest  : true,
                                 ).
 
 
-swipl_debug_adapter_launch_thread(Args, Handle, PrologThreadId) :-
+swipl_debug_adapter_launch_thread(Args, Handle, ThreadId) :-
     _{ cwd: CWD, module: ModulePath, goal: GoalString } :< Args,
     !,
     cd(CWD),
     user:ensure_loaded(ModulePath),
     thread_self(ServerThreadId),
     thread_create(swipl_debug_adapter_debugee(ModulePath, GoalString, ServerThreadId, Handle), PrologThreadId),
-    thread_get_message(started(PrologThreadId)).
+    thread_get_message(started(PrologThreadId)),
+    thread_property(PrologThreadId, id(ThreadId)).
 
 :- det(swipl_debug_adapter_debugee/4).
 swipl_debug_adapter_debugee(ModulePath, GoalString, ServerThreadId, Handle) :-
@@ -158,6 +180,13 @@ swipl_debug_adapter_handle_message(continue, _Port, _Frame, _Choice, Handle, con
     da_sdk_event(Handle, continued, _{threadId:Id}),
     retractall(swipl_debug_adapter_last_action(_)),
     asserta(swipl_debug_adapter_last_action(continue)).
+swipl_debug_adapter_handle_message(stack_trace(ReqSeq), Port, Frame, Choice, Handle, Action) :-
+    !,
+    debug(dap(tracer), "Getting stack trace", []),
+    swipl_debug_adapter_stack_trace(Port, Frame, Choice, StackFrames),
+    debug(dap(tracer), "Got stack trace ~w", [StackFrames]),
+    da_sdk_response(Handle, ReqSeq, stackTrace, _{stackFrames:StackFrames}),
+    swipl_debug_adapter_handle_messages(Port, Frame, Choice, Handle, Action).
 swipl_debug_adapter_handle_message(disconnect, _Port, _Frame, _Choice, Handle, nodebug) :-
     !,
     thread_self(Self),
@@ -202,7 +231,7 @@ swipl_debug_adapter_tracer_yield(fail) :-
     prolog_skip_level(_, very_deep),
     trace.
 swipl_debug_adapter_tracer_yield(continue) :-
-    swipl_debug_adapter_tracer_yield(continue),
+    swipl_debug_adapter_last_action(continue),
     !,
     notrace,
     prolog_skip_level(_, very_deep),
@@ -217,3 +246,46 @@ swipl_debug_adapter_tracer_yield(nodebug).
 swipl_debug_adapter_tracer_yield(abort).
 swipl_debug_adapter_tracer_yield(ignore) :-
     trace.
+
+
+swipl_debug_adapter_stack_trace(Port, Frame, Choice, StackTrace) :-
+    da_stack_frame_at_port(Frame, Port, Choice, ActiveFrame),
+    da_stack_trace(Frame, StackFrames),
+    maplist(swipl_debug_adapter_translate_stack_frame, [ActiveFrame|StackFrames], StackTrace).
+
+swipl_debug_adapter_translate_stack_frame(stack_frame(Id, InFrameLabel, PI, _Alternative, SourceSpan),
+                                          _{ id                          : Id,
+                                             name                        : Name,
+                                             line                        : SL,
+                                             column                      : SC,
+                                             endLine                     : EL,
+                                             endColumn                   : EC,
+                                             source                      : DAPSource,
+                                             instructionPointerReference : DAPLabel
+                                           }) :-
+    term_string(PI, Name),
+    swipl_debug_adapter_translate_source_span(SourceSpan, DAPSource, SL, SC, EL, EC),
+    swipl_debug_adapter_translate_inframe_label(InFrameLabel, DAPLabel).
+
+swipl_debug_adapter_translate_source_span(span(path(File), SL, SC, EL, EC),
+                                          _{ name            : Name,
+                                             path            : File,
+                                             origin          : "Static"
+                                           },
+                                          SL, SC, EL, EC
+                                         ) :-
+    !,
+    file_base_name(File, Name).
+swipl_debug_adapter_translate_source_span(span(reference(SourceReference), SL, SC, EL, EC),
+                                          _{ name            : "*dynamic*",
+                                             sourceReference : SourceReference,
+                                             origin          : "Dynamic"
+                                           },
+                                          SL, SC, EL, EC
+                                         ).
+swipl_debug_adapter_translate_inframe_label(port(Port), DAPLabel) :-
+    !,
+    functor(Port, PortName, _Arity),
+    atom_string(PortName, DAPLabel).
+swipl_debug_adapter_translate_inframe_label(pc(PC), DAPLabel) :-
+    number_string(PC, DAPLabel).

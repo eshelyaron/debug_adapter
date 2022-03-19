@@ -4,6 +4,7 @@
           ]
          ).
 
+:- use_module(compat).
 :- use_module(session).
 
 :- predicate_options(run_script/2, 2, [ server_executable(+any),
@@ -42,10 +43,11 @@ run_script_from_stream(In, Vars0, Session) :-
     unify_vars(Vars1, Vars0, Vars),
     execute_term(Term, In, Vars, Session).
 
-unify_vars([], Vars, Vars).
-unify_vars([H|T], Vars, Vars) :-
-    memberchk(H, Vars), !,
-    unify_vars(T, Vars, Vars).
+:- det(unify_vars/3).
+unify_vars([], Vars, Vars) :- !.
+unify_vars([H|T], Vars0, Vars) :-
+    memberchk(H, Vars0), !,
+    unify_vars(T, Vars0, Vars).
 unify_vars([H|T], Vars, [H|Vars]) :-
     unify_vars(T, Vars, Vars).
 
@@ -55,13 +57,19 @@ execute_term(?- Goal, In, Vars, Session) :-
     run_script_from_stream(In, Vars, Session).
 execute_term(Kind :- Body, In, Vars, Session0) :-
     semicolon_list(Body, Parts),
-    foldl(execute_part(Kind), Parts, Session0, Session),
+    foldl(execute_part_(Kind), Parts, Session0, Session),
     run_script_from_stream(In, Vars, Session).
 
+execute_part_(Kind, Part, Session0, Session) :-
+    debug(dap(script), "Executing ~p :- ~p", [Kind, Part]),
+    execute_part(Kind, Part, Session0, Session).
 execute_part(request, (Type:Req -> Res), Session0, Session) :-
+    debug(dap(test), "here", []),
     !, session_request_response(Type, Req, Res, Session0, Session).
 execute_part(request, (Type -> Res), Session0, Session) :-
-    !, session_request_response(Type, null, Res, Session0, Session).
+    debug(dap(test), "there", []),
+    !, session_request_response(Type, null, Res, Session0, Session),
+    debug(dap(test), "there ~w", [Res]).
 execute_part(request, (Type:Req *-> Success:Res0), Session0, Session) :-
     !, session_request_response(Type, Req, Success:Res, Session0, Session), Res0 >:< Res.
 execute_part(request, (Type *-> Success:Res0), Session0, Session) :-

@@ -127,7 +127,7 @@ da_hidden_frame(Frame) :-
 
 da_hidden_predicate(Goal) :- predicate_property(Goal, nodebug), !.
 da_hidden_predicate(Goal) :- predicate_property(Goal, hidden), !.
-da_hidden_predicate(Goal) :- qualified(Goal, _, UGoal), memberchk(UGoal, [da_debugee(_, _, _, _), da_trace(_, _, _), da_tracer_top_level(_, _), da_terminal(_, _), toplevel_call(_)]), !.
+da_hidden_predicate(swipl_debug_adapter:_).
 
 
 %!  da_frame_predicate_indicator(+FrameId, -PredicateIndicator) is det.
