@@ -1,0 +1,18 @@
+request :- initialize.
+event   :- initialized.
+request :- configurationDone.
+request :- launch   :  _{ cwd : WD, module : "./target/foo.pl", goal : "foo" }.
+event   :- stopped :<  _{ threadId : Id }.
+request :- threads -> true: _{threads: [_{id: Id, name: _}]} ;
+           stackTrace : _{ threadId : Id }
+           *->
+           true       : _{ stackFrames: [ActiveFrame|_] }.
+        ?- _{ line: 11,
+              column: 0,
+              endLine: 14,
+              endColumn: 12,
+              name: "foo:foo/0",
+              instructionPointerReference: "call"
+            } :< ActiveFrame.
+request :- disconnect.
+event   :- exited.
