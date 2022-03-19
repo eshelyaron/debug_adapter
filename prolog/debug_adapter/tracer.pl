@@ -65,10 +65,6 @@ da_debugee_emitted_message(Message, ServerThreadId) :-
     thread_send_message(ServerThreadId, DebugeeSystemThreadId-Message).
 
 
-da_server_interrupt(Handle) :-
-    put_code(Handle, 3).
-
-
 :- meta_predicate da_trace(0, ?, ?).
 
 da_trace(Goal, VarNames, ServerThreadId) :-

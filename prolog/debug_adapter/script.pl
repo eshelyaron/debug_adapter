@@ -1,7 +1,31 @@
-:- module(da_script, [run_script/2]).
+:- module(da_script,
+          [
+              run_script/2   % run_script(+Path, +Options)
+          ]
+         ).
 
 :- use_module(session).
 
+:- predicate_options(run_script/2, 2, [ server_executable(+any),
+                                        server_cli_args(+list(atom)),
+                                        bindings(+list(any))]).
+
+%! run_script(Path, Options) is det.
+%
+%  Main entry point for executing `dapscript`s. Reads the script from
+%  the file located at Path.
+%
+%  Supported Options are:
+%  * server_executable(+Exec)
+%    Exec specifies the path of the DAP server executable to run the script against.
+%    Defaults to the `swipl` executable.
+%  * server_cli_args(+Args)
+%    Args is a list of command line arguments that will be passed to the
+%    DAP server executable. Defaults to instructing `swipl` to load and run the SWI-Prolog debug
+%    adapter server from `library(debug_adapter/main)`.
+%  * bindings(+Bindings)
+%    Bindings is a list of variable bindings given as _Name_ = _Value_ pairs that will be made available
+%    in the context of the executed `dapscript`. Defaults to `[]`.
 run_script(Path, Options) :-
     swipl_executable(Swipl),
     option(server_executable(Exec), Options, Swipl),

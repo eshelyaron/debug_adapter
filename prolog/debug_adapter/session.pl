@@ -1,13 +1,13 @@
 :- module(
        da_session,
        [
-           session_request/5,
-           session_request_response/5,
-           session_response/5,
-           session_event/4,
-           session_reverse_request/4,
-           session_start/2,
-           session_stop/1
+           session_request/5,            % session_request(+Type, +Request, -RequestSeq, +Session0, -Session)
+           session_request_response/5,   % session_request_response(+Type, +Request, -Response, +Session0, -Session)
+           session_response/5,           % session_response(+Type, +RequestSeq, -Response, +Session0, -Session)
+           session_event/4,              % session_event(+Type, -Event, +Session0, -Session)
+           session_reverse_request/4,    % session_reverse_request(+Type, -Request, +Session0, -Session)
+           session_start/2,              % session_start(+ServerSpec, -Session)
+           session_stop/1                % session_stop(+Session)
        ]
    ).
 
@@ -15,6 +15,14 @@
 
 :- record(session(in, out, pid, seq=1, seen=[])).
 
+%! session_start(+ServerSpec, -Session) is det.
+%
+%  Start a new DAP session with server ServerSpec and unify Session with
+%  the newly created session's state.
+%
+%  ServerSpec is a non empty list with head _Exec_ and tail _Args_, where _Exec_
+%  specifies the DAP server executable and _Args_ is a list of command line
+%  arguments passed to the server's invocation.
 session_start([Exec|Args], Session) :-
     process_create(Exec, Args,
                    [ stdin(pipe(O)),
@@ -26,6 +34,10 @@ session_start([Exec|Args], Session) :-
     set_stream(O, buffer(false)),
     make_session([in(I), out(O), pid(P)], Session).
 
+
+%! session_stop(+Session) is det.
+%
+%  Stop the DAP session Session and the associated DAP server process.
 session_stop(Session) :-
     session_in(Session, I),
     session_out(Session, O),
