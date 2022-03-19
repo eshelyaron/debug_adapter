@@ -5,6 +5,7 @@
 :- nodebug(dap(main)).
 
 :- use_module(server).
+:- use_module(library(swipl_debug_adapter)).
 
 main(Argv) :-
     OptsSpec =
@@ -23,7 +24,7 @@ main(Argv) :-
        help('Print usage information')
       ],
       [opt(debug),
-       default(false),
+       default(true),
        type(boolean),
        shortflags([d]),
        longflags([debug]),
@@ -42,5 +43,5 @@ main(Argv) :-
       ),
       current_input(In),
       current_output(Out),
-      da_server([in(In), out(Out)])
+      da_server([in(In), out(Out), on_command(swipl_debug_adapter_command_callback)])
     ).

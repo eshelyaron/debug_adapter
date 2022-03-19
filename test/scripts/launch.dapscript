@@ -1,0 +1,10 @@
+request :- initialize.
+event   :- initialized.
+request :- configurationDone.
+request :- launch   :  _{ cwd : WD, module : "./target/foo.pl", goal : "foo" }.
+event   :- thread   :  _{ threadId : Id, reason : "started" } ;
+           stopped  :< _{ threadId : Id, reason : "entry"}.
+request :- continue :  _{ threadId : Id } ;
+           disconnect.
+event   :- continued:< _{ threadId : Id } ;
+           exited.
