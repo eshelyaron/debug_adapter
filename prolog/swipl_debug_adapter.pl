@@ -184,7 +184,7 @@ swipl_debug_adapter_trace(QGoal, VarNames, Handle) :-
 
 
 swipl_debug_adapter_goal_reified_result(Goal, VarNames, Result) :-
-    catch((   trace, Goal, notrace
+    catch((   trace, Goal, notrace, debug(dap(swipl), "Success! ~w", [Goal])
           ->  print_message(trace, da_tracer_top_level_query(true(VarNames))),
               Result = true
           ;   notrace,
