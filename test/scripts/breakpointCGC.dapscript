@@ -1,9 +1,10 @@
 request :- initialize.
 event   :- initialized.
+        ?- string_concat(WD, "/target/reload.pl", Path).
 request :- setBreakpoints: _{ breakpoints    : [_{line : 2}],
                               lines          : [2],
                               source         : _{ name : "reload.pl",
-                                                  path : "./target/reload.pl"
+                                                  path : Path
                                                 },
                               sourceModified : false }
            ->
@@ -24,8 +25,8 @@ request :- setBreakpoints: _{ breakpoints    : [_{line : 2}],
                       module : "./target/reload.pl",
                       goal   : "this_predicate"
                     }.
-event   :- stopped:< _{reason           : "entry",
-                       threadId         : Id}.
+event   :- stopped:< _{reason         : "entry",
+                       threadId       : Id}.
 request :- stepIn: _{threadId         : Id} ;
            stepIn: _{threadId         : Id} ;
            next  : _{threadId         : Id} ;
