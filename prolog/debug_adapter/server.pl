@@ -73,6 +73,9 @@ da_server(Options) :-
     option(on_command(OnCommand), Options),
     option(cleanup(Cleanup), Options, true),
     option(initial_state(State), Options, []),
+    get_time(Now),
+    option(timeout(Timeout), Options, 3600),
+    Deadline is Now + Timeout,
     set_stream(In, buffer(full)),
     set_stream(In, newline(detect)),
     set_stream(In, representation_errors(error)),
@@ -82,17 +85,17 @@ da_server(Options) :-
     set_stream(Out, buffer(false)),
     set_stream(Out, tty(false)),
     setup_call_cleanup(Setup,
-                       da_server_loop(Out, Q, OnCommand, 1, State),
+                       da_server_loop(Out, Q, Deadline, OnCommand, 1, State),
                        Cleanup).
 
 
-da_server_loop(_, _, _, stop, _) :- !.
-da_server_loop(O, Q, C, Seq0, State0) :-
-    thread_get_message(Q, M),
+da_server_loop(_, _, _, _, stop, _) :- !.
+da_server_loop(O, Q, Deadline, C, Seq0, State0) :-
+    thread_get_message(Q, M, [deadline(Deadline)]),
     debug(dap(server), "handling ~w", [M]),
     da_server_handle(O, Q, C, M, Seq0, Seq, State0, State),
     debug(dap(server), "handled ~w", [M]),
-    da_server_loop(O, Q, C, Seq, State).
+    da_server_loop(O, Q, Deadline, C, Seq, State).
 
 da_server_handle(Out, _, _, action(Action), Seq0, Seq, State, State) :-
     !,

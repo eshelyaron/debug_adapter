@@ -136,8 +136,10 @@ swipl_debug_adapter_launch_thread(Args, Handle, ThreadId) :-
     thread_get_message(started(PrologThreadId)),
     thread_property(PrologThreadId, id(ThreadId)).
 
+
 :- det(swipl_debug_adapter_debugee/4).
 swipl_debug_adapter_debugee(ModulePath, GoalString, ServerThreadId, Handle) :-
+    debug(dap(swipl), "Starting debuggee thread ~w ~w", [ModulePath, GoalString]),
     thread_self(Self),
     thread_send_message(ServerThreadId, started(Self)),
     thread_property(Self, id(Id)),
@@ -150,6 +152,7 @@ swipl_debug_adapter_debugee(ModulePath, GoalString, ServerThreadId, Handle) :-
     ->  qualified(QGoal, Module, Goal)
     ;   QGoal = Goal
     ),
+    debug(dap(swipl), "Tracing debuggee goal ~w", [QGoal]),
     swipl_debug_adapter_trace(QGoal, VarNames, Handle).
 
 
@@ -174,6 +177,7 @@ swipl_debug_adapter_trace(QGoal, VarNames, Handle) :-
     set_prolog_flag(gui_tracer, true),
     visible([+call, +exit, +fail, +redo, +unify, +cut_call, +cut_exit, +exception]),
     prolog_skip_level(_, very_deep),
+    debug(dap(swipl), "Calling ~w", [QGoal]),
     swipl_debug_adapter_goal_reified_result(QGoal, VarNames, Result),
     thread_self(Self),
     thread_property(Self, id(Id)),
@@ -185,7 +189,8 @@ swipl_debug_adapter_trace(QGoal, VarNames, Handle) :-
 
 swipl_debug_adapter_goal_reified_result(Goal, VarNames, Result) :-
     catch((   trace, Goal, notrace
-          ->  print_message(trace, da_tracer_top_level_query(true(VarNames))),
+          ->  debug(dap(swipl), "Outputing true.", [Goal]),
+              print_message(trace, da_tracer_top_level_query(true(VarNames))),
               Result = true
           ;   notrace,
               print_message(trace, da_tracer_top_level_query(false)),
@@ -203,8 +208,8 @@ swipl_debug_adapter_goal_reified_result(Goal, VarNames, Result) :-
 swipl_debug_adapter_message_hook(_   , silent, _) :- !.
 swipl_debug_adapter_message_hook(Term, _     , _) :-
     swipl_debug_adapter_handle(Handle),
-    message_to_string(Term, String0),
-    string_concat(String0, "\n", String),
+    phrase(prolog:message(Term), Lines),
+    print_message_lines(string(String), '', Lines),
     da_sdk_event(Handle, output, _{output:String, category:"stdout"}).
 
 
