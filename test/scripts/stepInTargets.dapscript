@@ -1,0 +1,32 @@
+request :- initialize.
+event   :- initialized.
+request :- configurationDone.
+request :- launch   :   _{ cwd : WD, module : "./target/choice.pl", goal : "cut_choice_point" }.
+event   :- stopped :<   _{ threadId : Id, reason : "entry" }.
+request :- threads
+           ->
+           true:        _{ threads: [_{id: Id, name: _}] } ;
+           stackTrace : _{ threadId : Id }
+           *->
+           true       : _{ stackFrames: [CallActiveFrame|_] }.
+        ?- _{ id : FrameId0 } :< CallActiveFrame.
+request :- stepInTargets: _{ frameId : FrameId0 }
+           ->
+           true:        _{targets: [_{id: 0, label: "step"}, _{id: 1, label: "fail"}]} ;
+           stepIn     : _{ threadId : Id } ;
+           stepIn     : _{ threadId : Id } ;
+           stepIn     : _{ threadId : Id } ;
+           stepIn     : _{ threadId : Id } ;
+           stepIn     : _{ threadId : Id } ;
+           stepIn     : _{ threadId : Id } ;
+           stackTrace : _{ threadId : Id }
+           *->
+           true       : _{ stackFrames: [CutExitActiveFrame|_] }.
+        ?- _{ id : FrameId } :< CutExitActiveFrame.
+request :- stepInTargets: _{ frameId : FrameId }
+           ->
+           true:        _{targets: [_{id: 0, label: "step"}]}.
+request :- continue : _{ threadId : Id }.
+event   :- output :< _{ output   : "true.\n" } ;
+           exited :< _{ exitCode : 0         }.
+request :- disconnect.
