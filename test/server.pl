@@ -58,26 +58,6 @@ user:term_expansion((script(Name) :- Body),
 %%     event("exited").
 
 
-%% script(functionBreakpoint) :-
-%%     reqres("initialize"),
-%%     call(cwd(CWD)),
-%%     reqres("launch", _{ cwd    : CWD,
-%%                         module : "./target/breakpoint.pl",
-%%                         goal   : "bp"
-%%                       }),
-%%     event("initialized"),
-%%     reqres("setFunctionBreakpoints",
-%%            _{ breakpoints : [_{name : "is_a/2"}] },
-%%            _{ breakpoints : [_{verified : true}] }),
-%%     reqres("configurationDone"),
-%%     event("stopped", _{description:_, hitBreakpointIds:_, reason:"entry", text:_, threadId:Id}),
-%%     reqres("continue", _{threadId: Id}),
-%%     event("continued"),
-%%     event("stopped", _{description:_, hitBreakpointIds:_, reason:"function breakpoint", text:_, threadId:Id}),
-%%     reqres("disconnect"),
-%%     event("exited").
-
-
 %% script(exceptionBreakpoints) :-
 %%     reqres("initialize"),
 %%     call(cwd(CWD)),
@@ -92,23 +72,6 @@ user:term_expansion((script(Name) :- Body),
 %%     reqres("continue", _{threadId: Id}),
 %%     event("continued"),
 %%     event("stopped", _{description:_, hitBreakpointIds:_, reason:"exception", text:_, threadId:Id}),
-%%     reqres("disconnect"),
-%%     event("exited").
-
-
-%% script(voluntaryTrace) :-
-%%     reqres("initialize"),
-%%     call(cwd(CWD)),
-%%     reqres("launch", _{ cwd    : CWD,
-%%                         module : "./target/trace.pl",
-%%                         goal   : "doit"
-%%                       }),
-%%     event("initialized"),
-%%     reqres("configurationDone"),
-%%     event("stopped", _{description:_, hitBreakpointIds:_, reason:"entry", text:_, threadId:Id}),
-%%     reqres("continue", _{threadId: Id}),
-%%     event("continued"),
-%%     event("stopped", _{description:_, hitBreakpointIds:_, reason:"trace", text:_, threadId:Id}),
 %%     reqres("disconnect"),
 %%     event("exited").
 

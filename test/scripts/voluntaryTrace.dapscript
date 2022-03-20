@@ -1,0 +1,13 @@
+request :- initialize.
+event   :- initialized.
+request :- launch: _{ cwd    : WD,
+                      module : "./target/trace.pl",
+                      goal   : "doit"
+                    } ;
+           configurationDone.
+event   :- stopped:< _{ threadId : Id, reason : "entry"}.
+request :- continue: _{ threadId : Id }.
+event   :- stopped:< _{ threadId : Id, reason : "trace"}.
+request :- continue: _{ threadId : Id }.
+event   :- exited.
+request :- disconnect.
