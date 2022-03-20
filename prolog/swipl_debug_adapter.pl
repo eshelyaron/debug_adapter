@@ -95,6 +95,23 @@ swipl_debug_adapter_command_callback(restartFrame, Arguments, ReqSeq, _Handle, c
                                          fail),
             Threads0,
             Threads).
+swipl_debug_adapter_command_callback(setFunctionBreakpoints, Arguments, ReqSeq, Handle, State, State) :-
+    !,
+    debug(dap(swipl), "Handling setFunctionBreakpoints request", []),
+    _{ breakpoints : ReqBreakpoints } :< Arguments,
+    maplist(swipl_debug_adapter_translate_function_breakpoint, ReqBreakpoints, PIs),
+    retractall(swipl_debug_adapter_function_breakpoint(_)),
+    nospyall,
+    findall(_{verified:Verified},
+            (member(PI, PIs),
+             (   pi_head(PI, Head),
+                 predicate_property(Head, defined)
+             ->  asserta(swipl_debug_adapter_function_breakpoint(PI)),
+                 spy(PI), nodebug,
+                 Verified = true
+             ;   Verified = false)),
+            ResBreakpoints),
+    da_sdk_response(Handle, ReqSeq, setFunctionBreakpoints, _{breakpoints:ResBreakpoints}).
 swipl_debug_adapter_command_callback(disconnect, _Arguments, ReqSeq, Handle, configured(Threads), disconnected) :-
     !,
     debug(dap(swipl), "disconnecting", []),
@@ -139,7 +156,6 @@ swipl_debug_adapter_launch_thread(Args, Handle, ThreadId) :-
 
 :- det(swipl_debug_adapter_debugee/4).
 swipl_debug_adapter_debugee(ModulePath, GoalString, ServerThreadId, Handle) :-
-    debug(dap(swipl), "Starting debuggee thread ~w ~w", [ModulePath, GoalString]),
     thread_self(Self),
     thread_send_message(ServerThreadId, started(Self)),
     thread_property(Self, id(Id)),
@@ -152,7 +168,6 @@ swipl_debug_adapter_debugee(ModulePath, GoalString, ServerThreadId, Handle) :-
     ->  qualified(QGoal, Module, Goal)
     ;   QGoal = Goal
     ),
-    debug(dap(swipl), "Tracing debuggee goal ~w", [QGoal]),
     swipl_debug_adapter_trace(QGoal, VarNames, Handle).
 
 
@@ -160,10 +175,19 @@ swipl_debug_adapter_translate_exit_code(true        , 0) :- !.
 swipl_debug_adapter_translate_exit_code(false       , 1) :- !.
 swipl_debug_adapter_translate_exit_code(exception(_), 2) :- !.
 
+swipl_debug_adapter_translate_function_breakpoint(D, M:P) :-
+    get_dict(name, D, S),
+    term_string(M:P, S),
+    !.
+swipl_debug_adapter_translate_function_breakpoint(D, user:P) :-
+    get_dict(name, D, S),
+    term_string(P, S).
 
 :- thread_local
    swipl_debug_adapter_handle/1,
-   swipl_debug_adapter_last_action/1,
+   swipl_debug_adapter_last_action/1.
+
+:- dynamic
    swipl_debug_adapter_function_breakpoint/1.
 
 
@@ -177,7 +201,6 @@ swipl_debug_adapter_trace(QGoal, VarNames, Handle) :-
     set_prolog_flag(gui_tracer, true),
     visible([+call, +exit, +fail, +redo, +unify, +cut_call, +cut_exit, +exception]),
     prolog_skip_level(_, very_deep),
-    debug(dap(swipl), "Calling ~w", [QGoal]),
     swipl_debug_adapter_goal_reified_result(QGoal, VarNames, Result),
     thread_self(Self),
     thread_property(Self, id(Id)),
@@ -189,8 +212,7 @@ swipl_debug_adapter_trace(QGoal, VarNames, Handle) :-
 
 swipl_debug_adapter_goal_reified_result(Goal, VarNames, Result) :-
     catch((   trace, Goal, notrace
-          ->  debug(dap(swipl), "Outputing true.", [Goal]),
-              print_message(trace, da_tracer_top_level_query(true(VarNames))),
+          ->  print_message(trace, da_tracer_top_level_query(true(VarNames))),
               Result = true
           ;   notrace,
               print_message(trace, da_tracer_top_level_query(false)),
@@ -243,12 +265,10 @@ qualified(UnqualifiedGoal, user, UnqualifiedGoal).
 
 user:prolog_trace_interception(Port, Frame, Choice, Action) :-
     notrace(swipl_debug_adapter_trace_interception(Port, Frame, Choice, Action)),
-    debug(dap(tracer), "Trace action ~w", [Action]),
     swipl_debug_adapter_tracer_yield(Action).
 
 
 swipl_debug_adapter_trace_interception(Port, Frame, Choice, Action) :-
-    debug(dap(tracer), "Trace interception", []),
     swipl_debug_adapter_handle(Handle),
     !,
     swipl_debug_adapter_last_action(LastAction),
@@ -263,12 +283,10 @@ swipl_debug_adapter_stopped(Port, Frame, Choice, LastAction, Handle, Action) :-
     thread_property(Self, id(Id)),
     put_dict(threadId, Reason, Id, Body),
     da_sdk_event(Handle, stopped, Body),
-    swipl_debug_adapter_handle_messages(Port, Frame, Choice, Handle, Action),
-    debug(dap(tracer), "Handled messages", []).
+    swipl_debug_adapter_handle_messages(Port, Frame, Choice, Handle, Action).
 
 swipl_debug_adapter_handle_messages(Port, Frame, Choice, Handle, Action) :-
     thread_get_message(M),
-    debug(dap(tracer), "Got message ~w", [M]),
     swipl_debug_adapter_handle_message(M, Port, Frame, Choice, Handle, Action).
 
 swipl_debug_adapter_handle_message(continue, _Port, _Frame, _Choice, Handle, continue) :-
@@ -327,7 +345,10 @@ swipl_debug_adapter_stopped_reason(_           , _, pause        , _{reason:paus
 swipl_debug_adapter_stopped_reason(_           , _, breakpoint(B), _{reason:breakpoint, hitBreakpointIds:[B]}) :- !.
 swipl_debug_adapter_stopped_reason(call        , F, _            , _{reason:"function breakpoint"}) :-
     prolog_frame_attribute(F, predicate_indicator, PI),
-    swipl_debug_adapter_function_breakpoint(PI),
+    (   PI = _:_
+    ->  swipl_debug_adapter_function_breakpoint(PI)
+    ;   swipl_debug_adapter_function_breakpoint(user:PI)
+    ),
     !.
 swipl_debug_adapter_stopped_reason(_           , _, _            , _{reason:trace}).
 

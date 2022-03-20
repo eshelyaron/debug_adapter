@@ -92,9 +92,7 @@ da_server(Options) :-
 da_server_loop(_, _, _, _, stop, _) :- !.
 da_server_loop(O, Q, Deadline, C, Seq0, State0) :-
     thread_get_message(Q, M, [deadline(Deadline)]),
-    debug(dap(server), "handling ~w", [M]),
     da_server_handle(O, Q, C, M, Seq0, Seq, State0, State),
-    debug(dap(server), "handled ~w", [M]),
     da_server_loop(O, Q, Deadline, C, Seq, State).
 
 da_server_handle(Out, _, _, action(Action), Seq0, Seq, State, State) :-
@@ -111,7 +109,6 @@ da_server_handle(Out, Q, CB, stream(Message), Seq0, Seq, State0, State) :-
     ->  true
     ;   Arguments = null
     ),
-    debug(dap(server), "Calling cb", []),
     (   call(CB, Command, Arguments, RequestSeq, Q, State0, State)
     ->  Seq = Seq0
     ;   State = State0,
