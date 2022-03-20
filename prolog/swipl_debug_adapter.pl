@@ -29,7 +29,7 @@ swipl_debug_adapter_command_callback(disconnect, _Arguments, ReqSeq, Handle, ini
     !,
     debug(dap(swipl), "Disconnecting", []),
     da_sdk_response(Handle, ReqSeq, disconnect),
-    da_sdk_event(Handle, exited),
+    da_sdk_event(Handle, exited, _{ exitCode : 0 }),
     da_sdk_stop(Handle).
 swipl_debug_adapter_command_callback(configurationDone, _Arguments, ReqSeq, Handle, initialized(_), configured([])) :-
     !,

@@ -6,9 +6,9 @@
    ).
 
 
-/** <module> SWI-Prolog Debug Adapter Server
+/** <module> SWI-Prolog Debug Adapter Protocol Server
 
-This module contains the core logic for handling DAP request sent by DAP clients which are most
+This module contains the core logic for handling DAP requests sent by DAP clients which are most
 commonly IDE extensions controlled interactivly by a progammer. The main entry point is da_server/1.
 
 The implementation is most dominently guided by the [DAP
@@ -25,7 +25,11 @@ specification](https://microsoft.github.io/debug-adapter-protocol/specification)
 
 :- predicate_options(da_server/1, 1, [ in(+stream),
                                        out(+stream),
-                                       threads(+list(pair))
+                                       threads(+list(pair)),
+                                       setup(+callable),
+                                       on_command(+callable),
+                                       cleanup(+callable),
+                                       initial_state(+any)
                                      ]
                     ).
 
@@ -34,15 +38,32 @@ specification](https://microsoft.github.io/debug-adapter-protocol/specification)
 %
 %   Starts the DAP server in the current thread. Options:
 %    * in(+Stream)
-%      Stream will be used by the server to read incoming messages from the client. Defaults to user_input.
+%      Stream will be used by the server to read incoming messages from the client. Defaults to =user_input=.
 %    * out(+Stream)
-%      Stream will be used by the server to emit outgoing messages to the client. Defaults to user_output.
-%    * threads(+Threads)
-%      List of initial debuggee threads to be monitored by the server.
-%    * setup(+Setup)
-%    * on_command(+OnCommand)
-%    * cleanup(+Cleanup)
+%      Stream will be used by the server to emit outgoing messages to the client. Defaults to =user_output=.
+%    * setup(:Setup)
+%      Setup will be called just before entering the main DAP server loop. Defaults to =true=.
+%    * on_command(:OnCommand)
+%      OnCommand is a closure of arity 6 which will be called during the DAP session loop
+%      to handle incoming DAP request, like so:
+%      ```
+%      call(OnCommand, +Command, +Arguments, +RequestSeq, +Handle, +State0, -State)
+%      ```
+%      Where:
+%      - _Command_ is an atom identyfing the type of the DAP request, e.g. =stepIn=.
+%      - _Arguments_ is either the atom =null= or a dict containing _Command_ -specific parameters.
+%      - _RequestSeq_ is an integer identifying the received request in the scope of the current session.
+%      - _Handle_ can be used to with the predicate from module =da_sdk= to
+%        communicate DAP messages (including the response for the handled command) back to the client.
+%      - _State0_ and _State_ can be used to pass arbitrary terms between invocations of _OnCommand_
+%        during the course of a DAP session. The session loop will initially call _OnCommand_ with
+%        _State0_ bound to an initial state term determined by the =initial_state= option of this
+%        predicate, in the next invocation _State0_ will be bound to the _State_ argument of the prior
+%        invocation, and so forth.
+%    * cleanup(:Cleanup)
+%      Cleanup will be called after the main DAP server loop completes. Defaults to =true=.
 %    * initial_state(+State)
+%      State will be used as the initial state argument passed to _OnCommand_. Defaults to [].
 
 :- det(da_server/1).
 da_server(Options) :-
