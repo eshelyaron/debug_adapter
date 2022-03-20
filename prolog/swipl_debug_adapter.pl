@@ -5,6 +5,7 @@
        ]
    ).
 
+:- use_module(library(debug_adapter/compat)).
 :- use_module(library(debug_adapter/sdk)).
 :- use_module(library(debug_adapter/stack)).
 
@@ -102,6 +103,7 @@ swipl_debug_adapter_command_callback(disconnect, _Arguments, ReqSeq, Handle, con
     da_sdk_stop(Handle).
 swipl_debug_adapter_command_callback(continue, Arguments, ReqSeq, Handle, configured(Threads), configured(Threads)) :-
     !,
+    debug(dap(swipl), "Handling continue request", []),
     _{ threadId : ThreadId } :< Arguments,
     select(ThreadId, Threads0, Threads1),
     catch((thread_send_message(ThreadId, continue), Threads = Threads0),
@@ -256,7 +258,8 @@ swipl_debug_adapter_stopped(Port, Frame, Choice, LastAction, Handle, Action) :-
     thread_property(Self, id(Id)),
     put_dict(threadId, Reason, Id, Body),
     da_sdk_event(Handle, stopped, Body),
-    swipl_debug_adapter_handle_messages(Port, Frame, Choice, Handle, Action).
+    swipl_debug_adapter_handle_messages(Port, Frame, Choice, Handle, Action),
+    debug(dap(tracer), "Handled messages", []).
 
 swipl_debug_adapter_handle_messages(Port, Frame, Choice, Handle, Action) :-
     thread_get_message(M),
