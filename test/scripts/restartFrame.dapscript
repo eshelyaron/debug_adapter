@@ -22,7 +22,7 @@ request :- stepIn   :   _{ threadId : Id } ;
         ?- _{ line: 12,
               column: 4,
               endLine: 12,
-              endColumn: 58,
+              endColumn: 62,
               name: "foo:foo/0",
               id : ParentFrameId
             } :< ParentFrame.

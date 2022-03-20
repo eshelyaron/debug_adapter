@@ -10,6 +10,7 @@
 :- use_module(library(debug_adapter/stack)).
 :- use_module(library(debug_adapter/source)).
 :- use_module(library(debug_adapter/frame)).
+:- use_module(library(debug_adapter/clause)).
 
 
 swipl_debug_adapter_command_callback(disconnect, _Arguments, ReqSeq, Handle, [], disconnected) :-
@@ -65,6 +66,17 @@ swipl_debug_adapter_command_callback(pause, Arguments, ReqSeq, Handle, configure
           _,
           (da_sdk_error(Handle, ReqSeq, pause, "Cannot pause requested thread"),
            Threads = Threads1)).
+swipl_debug_adapter_command_callback(source, Arguments, ReqSeq, Handle, State, State) :-
+    !,
+    _{ sourceReference : SourceReference } :< Arguments,
+    (   integer(SourceReference), SourceReference > 0
+    ->  da_source_clause_cached_reference(ClauseRef, SourceReference),
+        da_clause_decompiled(ClauseRef, Module, DecompiledClause, VariablesOffset),
+        da_clause_source_term(ClauseRef, Module, DecompiledClause, VariablesOffset, SourceClause, _, _),
+        with_output_to(string(Content), portray_clause(current_output, SourceClause, [module(Module)])),
+        da_sdk_response(Handle, ReqSeq, source, _{content:Content})
+    ;   da_sdk_error(Handle, ReqSeq, source, "Cannot provide source code for requested predicate")
+    ).
 swipl_debug_adapter_command_callback(exceptionInfo, Arguments, ReqSeq, _Handle, configured(Threads0), configured(Threads)) :-
     !,
     debug(dap(swipl), "Handling exceptionInfo request", []),

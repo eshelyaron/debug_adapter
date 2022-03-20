@@ -1,0 +1,27 @@
+request :- initialize.
+event   :- initialized.
+request :- configurationDone.
+request :- launch   :   _{ cwd : WD, module : "./target/foo.pl", goal : "foo" }.
+event   :- stopped :<   _{ threadId : Id, reason : "entry" }.
+request :- threads
+           ->
+           true:        _{ threads: [_{id: Id, name: _}] } ;
+           stepIn     : _{ threadId : Id } ;
+           stepIn     : _{ threadId : Id } ;
+           stepIn     : _{ threadId : Id } ;
+           stepIn     : _{ threadId : Id } ;
+           stepIn     : _{ threadId : Id } ;
+           stepIn     : _{ threadId : Id } ;
+           stepIn     : _{ threadId : Id } ;
+           stackTrace : _{ threadId : Id }
+           *->
+           true       : _{ stackFrames: [ActiveFrame|_] }.
+        ?- _{ source: _{name : "*dynamic*", origin: "Dynamic", sourceReference : Ref } } :< ActiveFrame.
+request :- source   : _{ sourceReference : Ref }
+           *->
+           true       : _{ content : Content }.
+        ?- term_string((bar(_) :- (_ = spam -> true; _ = foo)), Content).
+request :- continue : _{ threadId : Id }.
+event   :- output :< _{ output   : "true.\n" } ;
+           exited :< _{ exitCode : 0         }.
+request :- disconnect.
