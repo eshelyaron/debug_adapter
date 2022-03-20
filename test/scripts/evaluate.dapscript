@@ -1,0 +1,36 @@
+request :- initialize.
+event   :- initialized.
+request :- configurationDone.
+request :- launch   :   _{ cwd : WD, module : "./target/baz.pl", goal : "baz" }.
+event   :- stopped :<   _{ threadId : Id, reason : "entry" }.
+request :- threads
+           ->
+           true:        _{ threads: [_{id: Id, name: _}] } ;
+           stepIn     : _{ threadId : Id } ;
+           stepIn     : _{ threadId : Id } ;
+           stepIn     : _{ threadId : Id } ;
+           stepIn     : _{ threadId : Id } ;
+           stackTrace : _{ threadId : Id }
+           *->
+           true       : _{ stackFrames: [ActiveFrame0|_] }.
+        ?- _{ id : FrameId0 } :< ActiveFrame0.
+request :- evaluate   : _{ expression : "Y is X + 3", frameId : FrameId0 }
+           *->
+           true       : _{ result : Result0 }.
+        ?- sub_string(Result0, _, _, _, "Y=4").
+request :- stepIn     : _{ threadId : Id } ;
+           stepIn     : _{ threadId : Id } ;
+           stepIn     : _{ threadId : Id } ;
+           stepIn     : _{ threadId : Id } ;
+           stackTrace : _{ threadId : Id }
+           *->
+           true       : _{ stackFrames: [ActiveFrame|_] }.
+        ?- _{ id : FrameId } :< ActiveFrame.
+request :- evaluate   : _{ expression : "Y is X + 3", frameId : FrameId }
+           *->
+           true       : _{ result : Result }.
+        ?- sub_string(Result, _, _, _, "Y=5").
+request :- continue : _{ threadId : Id }.
+event   :- output :< _{ output   : "true.\n" } ;
+           exited :< _{ exitCode : 0         }.
+request :- disconnect.
