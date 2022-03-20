@@ -66,7 +66,7 @@ swipl_debug_adapter_command_callback(stepIn, Arguments, ReqSeq, _Handle, configu
     ->  true
     ;   Target = 0
     ),
-    catch((thread_send_message(ThreadId, stepIn(ReqSeq, Target)), Threads = Threads0),
+    catch((thread_send_message(ThreadId, step_in(ReqSeq, Target)), Threads = Threads0),
           _,
           Threads = Threads1).
 swipl_debug_adapter_command_callback(next, Arguments, ReqSeq, _Handle, configured(Threads0), configured(Threads)) :-
@@ -77,6 +77,23 @@ swipl_debug_adapter_command_callback(next, Arguments, ReqSeq, _Handle, configure
     catch((thread_send_message(ThreadId, next(ReqSeq)), Threads = Threads0),
           _,
           Threads = Threads1).
+swipl_debug_adapter_command_callback(stepOut, Arguments, ReqSeq, _Handle, configured(Threads0), configured(Threads)) :-
+    !,
+    debug(dap(swipl), "Handling stepOut request", []),
+    _{ threadId : ThreadId } :< Arguments,
+    select(ThreadId, Threads0, Threads1),
+    catch((thread_send_message(ThreadId, step_out(ReqSeq)), Threads = Threads0),
+          _,
+          Threads = Threads1).
+swipl_debug_adapter_command_callback(restartFrame, Arguments, ReqSeq, _Handle, configured(Threads0), configured(Threads)) :-
+    !,
+    debug(dap(swipl), "Handling stepOut request", []),
+    _{ frameId : FrameId } :< Arguments,
+    include({ReqSeq, FrameId}/[T]>>catch(thread_send_message(T, restart_frame(ReqSeq, FrameId)),
+                                         _,
+                                         fail),
+            Threads0,
+            Threads).
 swipl_debug_adapter_command_callback(disconnect, _Arguments, ReqSeq, Handle, configured(Threads), disconnected) :-
     !,
     debug(dap(swipl), "disconnecting", []),
@@ -145,7 +162,7 @@ swipl_debug_adapter_translate_exit_code(exception(_), 2) :- !.
    swipl_debug_adapter_function_breakpoint/1.
 
 
-:- det(swipl_debug_adapter_trace/4).
+:- det(swipl_debug_adapter_trace/3).
 swipl_debug_adapter_trace(QGoal, VarNames, Handle) :-
     asserta(swipl_debug_adapter_handle(Handle)),
     asserta(swipl_debug_adapter_last_action(entry)),
@@ -265,12 +282,12 @@ swipl_debug_adapter_handle_message(disconnect, _Port, _Frame, _Choice, Handle, n
     da_sdk_event(Handle, continued, _{threadId:Id}),
     retractall(swipl_debug_adapter_last_action(_)),
     asserta(swipl_debug_adapter_last_action(continue)).
-swipl_debug_adapter_handle_message(stepIn(ReqSeq, 0), _Port, _Frame, _Choice, Handle, continue) :-
+swipl_debug_adapter_handle_message(step_in(ReqSeq, 0), _Port, _Frame, _Choice, Handle, continue) :-
     !,
     da_sdk_response(Handle, ReqSeq, stepIn),
     retractall(swipl_debug_adapter_last_action(_)),
     asserta(swipl_debug_adapter_last_action(step_in)).
-swipl_debug_adapter_handle_message(stepIn(ReqSeq, 1), _Port, _Frame, _Choice, Handle, fail) :-
+swipl_debug_adapter_handle_message(step_in(ReqSeq, 1), _Port, _Frame, _Choice, Handle, fail) :-
     !,
     da_sdk_response(Handle, ReqSeq, stepIn),
     retractall(swipl_debug_adapter_last_action(_)),
@@ -280,6 +297,16 @@ swipl_debug_adapter_handle_message(next(ReqSeq), _Port, _Frame, _Choice, Handle,
     da_sdk_response(Handle, ReqSeq, next),
     retractall(swipl_debug_adapter_last_action(_)),
     asserta(swipl_debug_adapter_last_action(next)).
+swipl_debug_adapter_handle_message(step_out(ReqSeq), _Port, _Frame, _Choice, Handle, up) :-
+    !,
+    da_sdk_response(Handle, ReqSeq, stepOut),
+    retractall(swipl_debug_adapter_last_action(_)),
+    asserta(swipl_debug_adapter_last_action(step_out)).
+swipl_debug_adapter_handle_message(restart_frame(ReqSeq, FrameId), _Port, _Frame, _Choice, Handle, retry(FrameId)) :-
+    !,
+    da_sdk_response(Handle, ReqSeq, restartFrame),
+    retractall(swipl_debug_adapter_last_action(_)),
+    asserta(swipl_debug_adapter_last_action(restart_frame)).
 
 
 swipl_debug_adapter_stopped_reason(exception(E), _, _            , _{reason:exception, description:D}) :- !, term_string(E, D).
