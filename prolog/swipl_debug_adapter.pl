@@ -188,8 +188,9 @@ swipl_debug_adapter_trace(QGoal, VarNames, Handle) :-
 
 
 swipl_debug_adapter_goal_reified_result(Goal, VarNames, Result) :-
-    catch((   trace, Goal, notrace, debug(dap(swipl), "Success! ~w", [Goal])
-          ->  print_message(trace, da_tracer_top_level_query(true(VarNames))),
+    catch((   trace, Goal, notrace
+          ->  debug(dap(swipl), "Outputing true.", [Goal]),
+              print_message(trace, da_tracer_top_level_query(true(VarNames))),
               Result = true
           ;   notrace,
               print_message(trace, da_tracer_top_level_query(false)),
@@ -207,8 +208,8 @@ swipl_debug_adapter_goal_reified_result(Goal, VarNames, Result) :-
 swipl_debug_adapter_message_hook(_   , silent, _) :- !.
 swipl_debug_adapter_message_hook(Term, _     , _) :-
     swipl_debug_adapter_handle(Handle),
-    message_to_string(Term, String0),
-    string_concat(String0, "\n", String),
+    phrase(prolog:message(Term), Lines),
+    print_message_lines(string(String), '', Lines),
     da_sdk_event(Handle, output, _{output:String, category:"stdout"}).
 
 
