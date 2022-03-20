@@ -1,0 +1,14 @@
+request :- initialize.
+event   :- initialized.
+request :- configurationDone.
+request :- launch   :  _{ cwd : WD, module : "./target/pause.pl", goal : "long_runnning(2)" }.
+event   :- thread   :  _{ threadId : Id, reason : "started" } ;
+           stopped  :< _{ threadId : Id, reason : "entry"}.
+request :- continue :  _{ threadId : Id } ;
+           pause    :  _{ threadId : Id }.
+event   :- continued:< _{ threadId : Id }      ;
+           stopped  :< _{ threadId : Id, reason : "pause"}.
+request :- continue :  _{ threadId : Id }.
+event   :- output   :< _{ output   : "true.\n" } ;
+           exited   :< _{ exitCode : 0  }.
+request :- disconnect.

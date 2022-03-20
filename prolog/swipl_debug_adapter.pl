@@ -52,6 +52,19 @@ swipl_debug_adapter_command_callback(threads, _Arguments, ReqSeq, Handle, config
     maplist(number_string, Threads, Names),
     maplist([I,N,_{id:I,name:N}]>>true, Threads, Names, Ts),
     da_sdk_response(Handle, ReqSeq, threads, _{threads:Ts}).
+swipl_debug_adapter_command_callback(pause, Arguments, ReqSeq, Handle, configured(Threads0), configured(Threads)) :-
+    !,
+    debug(dap(swipl), "Handling pause request", []),
+    _{ threadId : ThreadId } :< Arguments,
+    select(ThreadId, Threads0, Threads1),
+    catch((thread_signal(ThreadId, (retractall(swipl_debug_adapter_last_action(_)),
+                                    asserta(swipl_debug_adapter_last_action(pause)))),
+           thread_signal(ThreadId, trace),
+           da_sdk_response(Handle, ReqSeq, pause),
+           Threads = Threads0),
+          _,
+          (da_sdk_error(Handle, ReqSeq, pause, "Cannot pause requested thread"),
+           Threads = Threads1)).
 swipl_debug_adapter_command_callback(exceptionInfo, Arguments, ReqSeq, _Handle, configured(Threads0), configured(Threads)) :-
     !,
     debug(dap(swipl), "Handling exceptionInfo request", []),
