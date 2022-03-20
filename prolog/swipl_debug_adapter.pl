@@ -112,6 +112,17 @@ swipl_debug_adapter_command_callback(setFunctionBreakpoints, Arguments, ReqSeq, 
              ;   Verified = false)),
             ResBreakpoints),
     da_sdk_response(Handle, ReqSeq, setFunctionBreakpoints, _{breakpoints:ResBreakpoints}).
+swipl_debug_adapter_command_callback(setExceptionBreakpoints, Arguments, ReqSeq, Handle, State, State) :-
+    !,
+    debug(dap(swipl), "Handling setExceptionBreakpoints request", []),
+    _{ filters : Filters } :< Arguments,
+    (   Filters == []
+    ->  retractall(swipl_debug_adapter_trapping),
+        da_sdk_response(Handle, ReqSeq, setExceptionBreakpoints, _{breakpoints:[]})
+    ;   Filters = ["true"|_]
+    ->  asserta(swipl_debug_adapter_trapping),
+        da_sdk_response(Handle, ReqSeq, setExceptionBreakpoints, _{breakpoints:[_{verified:true}]})
+    ).
 swipl_debug_adapter_command_callback(disconnect, _Arguments, ReqSeq, Handle, configured(Threads), disconnected) :-
     !,
     debug(dap(swipl), "disconnecting", []),
@@ -188,6 +199,7 @@ swipl_debug_adapter_translate_function_breakpoint(D, user:P) :-
    swipl_debug_adapter_last_action/1.
 
 :- dynamic
+   swipl_debug_adapter_trapping/0,
    swipl_debug_adapter_function_breakpoint/1.
 
 
@@ -197,6 +209,9 @@ swipl_debug_adapter_trace(QGoal, VarNames, Handle) :-
     asserta(swipl_debug_adapter_last_action(entry)),
     asserta((user:thread_message_hook(Term, Kind, Lines) :-
                  swipl_debug_adapter_message_hook(Term, Kind, Lines),
+                 fail)),
+    asserta((user:prolog_exception_hook(Ex, Out, Frame, Catcher) :-
+                 swipl_debug_adapter_exception_hook(Ex, Out, Frame, Catcher),
                  fail)),
     set_prolog_flag(gui_tracer, true),
     visible([+call, +exit, +fail, +redo, +unify, +cut_call, +cut_exit, +exception]),
@@ -224,6 +239,15 @@ swipl_debug_adapter_goal_reified_result(Goal, VarNames, Result) :-
            Result = exception(Catcher)
           )
          ).
+
+
+
+
+swipl_debug_adapter_exception_hook(_In, _Out, _Frame, _Catcher) :-
+    thread_self(Me),
+    thread_property(Me, debug(true)),
+    swipl_debug_adapter_trapping,
+    trace.
 
 
 :- det(swipl_debug_adapter_message_hook/3).
