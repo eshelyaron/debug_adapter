@@ -478,6 +478,7 @@ swipl_debug_adapter_handle_message(evaluate(ReqSeq, FrameId, SourceTerm), Port, 
     !,
     debug(dap(swipl), "Evaluating goal ~w in frame ~w", [SourceTerm, FrameId]),
     da_frame_evaluate(FrameId, SourceTerm, Result, Bindings),
+    debug(dap(swipl), "Output bindings ~w", [Bindings]),
     format(string(Res), "~w~n~w.", [Bindings, Result]),
     da_sdk_response(Handle, ReqSeq, evaluate, _{result:Res, variablesReference:0}),
     swipl_debug_adapter_handle_messages(Port, Frame, Choice, Handle, Action).
