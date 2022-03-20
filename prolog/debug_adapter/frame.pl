@@ -408,10 +408,15 @@ da_frame_locals(Frame, I, VarNames, Variables) :-
 
 :- det(da_frame_evaluate/4).
 da_frame_evaluate(FrameId, SourceTerm, Result, Bindings) :-
+    debug(dap(swipl), "Reading source term ~w", [SourceTerm]),
     read_term_from_atom(SourceTerm, Goal, [variable_names(Bindings)]),
+    debug(dap(swipl), "Read goal ~w with bindings ~w", [SourceTerm, Bindings]),
     da_frame_clause(FrameId, ClauseRef),
+    debug(dap(swipl), "Evaluating in clause ~w", [ClauseRef]),
     da_clause_variable_names(ClauseRef, ClauseVarNames),
+    debug(dap(swipl), "Unifying variables ~w ~w", [Bindings, ClauseVarNames]),
     da_frame_unify_variables(FrameId, ClauseVarNames, Bindings),
+    debug(dap(swipl), "Really evaluating ~w", [Goal]),
     da_evaluate(Goal, Result).
 
 
