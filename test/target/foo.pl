@@ -9,7 +9,7 @@
 :- use_module(bar).
 
 foo :-
-    asserta((bar(Foo) :- (Foo = spam -> true; Foo = foo))),
+    bar:asserta((bar(Foo) :- (Foo = spam -> true; Foo = foo))),
     bar(foo, baz),
     foo(bar).
 
