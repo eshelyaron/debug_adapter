@@ -43,5 +43,5 @@ main(Argv) :-
       ),
       current_input(In),
       current_output(Out),
-      da_server([in(In), out(Out), on_command(swipl_debug_adapter_command_callback)])
+      da_server([in(In), out(Out), on_command(swipl_debug_adapter_command_callback), timeout(5)])
     ).
