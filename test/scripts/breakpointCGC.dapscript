@@ -1,0 +1,40 @@
+request :- initialize.
+event   :- initialized.
+request :- setBreakpoints: _{ breakpoints    : [_{line : 2}],
+                              lines          : [2],
+                              source         : _{ name : "reload.pl",
+                                                  path : "./target/reload.pl"
+                                                },
+                              sourceModified : false }
+           ->
+           true: _{breakpoints : [_{ column    : 4,
+                                     endColumn : 8,
+                                     endLine   : 2,
+                                     id        : 1,
+                                     line      : 2,
+                                     message   : null,
+                                     source    : _{ name   : "reload.pl",
+                                                    origin : "Static",
+                                                    path   : _
+                                                  },
+                                     verified  : true
+                                   }]} ;
+           configurationDone ;
+           launch: _{ cwd    : WD,
+                      module : "./target/reload.pl",
+                      goal   : "this_predicate"
+                    }.
+event   :- stopped:< _{reason           : "entry",
+                       threadId         : Id}.
+request :- stepIn: _{threadId         : Id} ;
+           stepIn: _{threadId         : Id} ;
+           next  : _{threadId         : Id} ;
+           stepIn: _{threadId         : Id} ;
+           next  : _{threadId         : Id} ;
+           stepIn: _{threadId         : Id} ;
+           next  : _{threadId         : Id}.
+event   :- breakpoint: _{reason     : "removed",
+                         breakpoint : _{ id : 1, verified : false }}.
+request :- continue: _{threadId       : Id}.
+event   :- exited.
+request :- disconnect.

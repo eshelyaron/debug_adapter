@@ -8,6 +8,8 @@
 :- use_module(library(debug_adapter/compat)).
 :- use_module(library(debug_adapter/sdk)).
 :- use_module(library(debug_adapter/stack)).
+:- use_module(library(debug_adapter/source)).
+:- use_module(library(debug_adapter/frame)).
 
 
 swipl_debug_adapter_command_callback(disconnect, _Arguments, ReqSeq, Handle, [], disconnected) :-
@@ -123,6 +125,17 @@ swipl_debug_adapter_command_callback(setExceptionBreakpoints, Arguments, ReqSeq,
     ->  asserta(swipl_debug_adapter_trapping),
         da_sdk_response(Handle, ReqSeq, setExceptionBreakpoints, _{breakpoints:[_{verified:true}]})
     ).
+swipl_debug_adapter_command_callback(setBreakpoints, Arguments, ReqSeq, Handle, State, State) :-
+    !,
+    debug(dap(swipl), "Handling setBreakpoints request", []),
+    _{ source      : DAPSource,
+       breakpoints : DAPReqBreakpoints
+     } :< Arguments,
+    dap_source_path(DAPSource, Path),
+    maplist(swipl_debug_adapter_translate_source_breakpoint(Path), DAPReqBreakpoints, ReqBreakpoints),
+    da_breakpoints_set(Path, ReqBreakpoints, ResBreakpoints),
+    maplist(swipl_debug_adapter_translate_result_breakpoint, ResBreakpoints, DAPBreakpoints),
+    da_sdk_response(Handle, ReqSeq, setBreakpoints, _{breakpoints:DAPBreakpoints}).
 swipl_debug_adapter_command_callback(disconnect, _Arguments, ReqSeq, Handle, configured(Threads), disconnected) :-
     !,
     debug(dap(swipl), "disconnecting", []),
@@ -153,6 +166,8 @@ swipl_debug_adapter_capabilities(_{ supportsConfigurationDoneRequest  : true,
                                   }
                                 ).
 
+dap_source_path(D, path(P)     ) :- _{ path            : P0 } :< D, !, absolute_file_name(P0, P).
+dap_source_path(D, reference(R)) :- _{ sourceReference : R  } :< D.
 
 swipl_debug_adapter_launch_thread(Args, Handle, ThreadId) :-
     _{ cwd: CWD, module: ModulePath, goal: GoalString } :< Args,
@@ -186,6 +201,64 @@ swipl_debug_adapter_translate_exit_code(true        , 0) :- !.
 swipl_debug_adapter_translate_exit_code(false       , 1) :- !.
 swipl_debug_adapter_translate_exit_code(exception(_), 2) :- !.
 
+swipl_debug_adapter_translate_source_breakpoint(P, D, source_breakpoint(L, C, Cond, Hit, Log)) :-
+    (   get_dict(line, D, L)
+    ->  true
+    ;   L = 0
+    ),
+    (   get_dict(column, D, C0)
+    ->  true
+    ;   C0 = 5    % 5 is a "guess" of the indentation.
+    ),
+    da_source_file_offsets_line_column_pairs(P, [C], [L-C0]),
+    (   get_dict(condition, D, Cond)
+    ->  true
+    ;   Cond = "true"
+    ),
+    (   get_dict(logMessage, D, Log0)
+    ->  Log = log_message(Log0)
+    ;   Log = null
+    ),
+    (   get_dict(hitCondition, D, Hit0)
+    ->  (   number(Hit0)
+        ->  Hit = Hit0
+        ;   number_string(Hit, Hit0)
+        )
+    ;   Hit = 0
+    ).
+
+swipl_debug_adapter_translate_result_breakpoint(breakpoint(Id, Verified, Message, SourceSpan),
+                                                _{ id                 : Id,
+                                                   verified           : Verified,
+                                                   message            : Message,
+                                                   source             : DAPSource,
+                                                   line               : SL,
+                                                   column             : SC,
+                                                   endLine            : EL,
+                                                   endColumn          : EC
+                                                 }
+                                               ) :-
+    swipl_debug_adapter_translate_source_span(SourceSpan, DAPSource, SL, SC, EL, EC).
+
+
+swipl_debug_adapter_translate_source_span(span(path(File), SL, SC, EL, EC),
+                                          _{ name            : Name,
+                                             path            : File,
+                                             origin          : "Static"
+                                           },
+                                          SL, SC, EL, EC
+                                         ) :-
+    !,
+    file_base_name(File, Name).
+swipl_debug_adapter_translate_source_span(span(reference(SourceReference), SL, SC, EL, EC),
+                                          _{ name            : "*dynamic*",
+                                             sourceReference : SourceReference,
+                                             origin          : "Dynamic"
+                                           },
+                                          SL, SC, EL, EC
+                                         ).
+
+
 swipl_debug_adapter_translate_function_breakpoint(D, M:P) :-
     get_dict(name, D, S),
     term_string(M:P, S),
@@ -195,17 +268,18 @@ swipl_debug_adapter_translate_function_breakpoint(D, user:P) :-
     term_string(P, S).
 
 :- thread_local
-   swipl_debug_adapter_handle/1,
    swipl_debug_adapter_last_action/1.
 
 :- dynamic
+   swipl_debug_adapter_handle/1,
    swipl_debug_adapter_trapping/0,
+   swipl_debug_adapter_source_breakpoint/7,
    swipl_debug_adapter_function_breakpoint/1.
 
 
 :- det(swipl_debug_adapter_trace/3).
 swipl_debug_adapter_trace(QGoal, VarNames, Handle) :-
-    asserta(swipl_debug_adapter_handle(Handle)),
+    asserta(swipl_debug_adapter_handle(Handle), Ref),
     asserta(swipl_debug_adapter_last_action(entry)),
     asserta((user:thread_message_hook(Term, Kind, Lines) :-
                  swipl_debug_adapter_message_hook(Term, Kind, Lines),
@@ -213,10 +287,13 @@ swipl_debug_adapter_trace(QGoal, VarNames, Handle) :-
     asserta((user:prolog_exception_hook(Ex, Out, Frame, Catcher) :-
                  swipl_debug_adapter_exception_hook(Ex, Out, Frame, Catcher),
                  fail)),
+    prolog_listen(break, swipl_debug_adapter_handle_break_event, [as(last), name(swipl_debug_adapter)]),
     set_prolog_flag(gui_tracer, true),
     visible([+call, +exit, +fail, +redo, +unify, +cut_call, +cut_exit, +exception]),
     prolog_skip_level(_, very_deep),
     swipl_debug_adapter_goal_reified_result(QGoal, VarNames, Result),
+    prolog_listen(break, swipl_debug_adapter_mock_break_event, [as(last), name(swipl_debug_adapter)]),
+    erase(Ref),
     thread_self(Self),
     thread_property(Self, id(Id)),
     da_sdk_event(Handle, thread, _{ reason   : "exited",
@@ -241,6 +318,19 @@ swipl_debug_adapter_goal_reified_result(Goal, VarNames, Result) :-
          ).
 
 
+swipl_debug_adapter_handle_break_event(gc, ClauseRef, PC) :-
+    debug(dap(swipl), "Handling breakpoint event", []),
+    swipl_debug_adapter_handle(Handle),
+    !,
+    (   retract(swipl_debug_adapter_source_breakpoint(BP, ClauseRef, PC, _, _, _, _))
+    ->  da_sdk_event(Handle, breakpoint, _{ reason     : "removed",
+                                            breakpoint : _{ id       : BP,
+                                                            verified : false }})
+    ;   true
+    ).
+
+
+swipl_debug_adapter_mock_break_event(_, _, _) :- fail.
 
 
 swipl_debug_adapter_exception_hook(_In, _Out, _Frame, _Catcher) :-
@@ -274,17 +364,10 @@ prolog:message(da_tracer_top_level_query(false)) -->
 prolog:message(da_tracer_top_level_query(exception(E))) -->
     !,
     [ 'unhandled exception: ~w.'-[E] ].
-
-
-qualified(Module:UnqualifiedGoal, Module, UnqualifiedGoal) :-
-    !.
-qualified('<meta-call>'(_Module0:Goal), Module, UnqualifiedGoal) :-
-    qualified(Goal, Module, UnqualifiedGoal),
-    !.
-qualified('<meta-call>'(Goal), Module, UnqualifiedGoal) :-
-    qualified(Goal, Module, UnqualifiedGoal),
-    !.
-qualified(UnqualifiedGoal, user, UnqualifiedGoal).
+prolog:message(log_message(BP, Map, String0)) -->
+    { interpolate_string(String0, String, Map, []) },
+    !,
+    [ 'Log point ~w: ~w'-[BP, String] ].
 
 
 user:prolog_trace_interception(Port, Frame, Choice, Action) :-
@@ -434,25 +517,74 @@ swipl_debug_adapter_translate_stack_frame(stack_frame(Id, InFrameLabel, PI, _Alt
     swipl_debug_adapter_translate_source_span(SourceSpan, DAPSource, SL, SC, EL, EC),
     swipl_debug_adapter_translate_inframe_label(InFrameLabel, DAPLabel).
 
-swipl_debug_adapter_translate_source_span(span(path(File), SL, SC, EL, EC),
-                                          _{ name            : Name,
-                                             path            : File,
-                                             origin          : "Static"
-                                           },
-                                          SL, SC, EL, EC
-                                         ) :-
-    !,
-    file_base_name(File, Name).
-swipl_debug_adapter_translate_source_span(span(reference(SourceReference), SL, SC, EL, EC),
-                                          _{ name            : "*dynamic*",
-                                             sourceReference : SourceReference,
-                                             origin          : "Dynamic"
-                                           },
-                                          SL, SC, EL, EC
-                                         ).
+
 swipl_debug_adapter_translate_inframe_label(port(Port), DAPLabel) :-
     !,
     functor(Port, PortName, _Arity),
     atom_string(PortName, DAPLabel).
 swipl_debug_adapter_translate_inframe_label(pc(PC), DAPLabel) :-
     number_string(PC, DAPLabel).
+
+
+prolog:break_hook(Clause, PC, FR, BFR, Expression, Action) :-
+    swipl_debug_adapter_source_breakpoint(BP, Clause, PC, Cond, Hit0, Hit, Log),
+    swipl_debug_adapter_break_hook(BP, Clause, PC, FR, BFR, Expression, Cond, Hit0, Hit, Log, Action).
+
+
+:- det(swipl_debug_adapter_break_hook/11).
+swipl_debug_adapter_break_hook(BP, Clause, PC, FR, _BFR, _Expression, Cond, Hit, Hit, Log, Action) :-
+    !,
+    retractall(swipl_debug_adapter_source_breakpoint(BP, _, _, _, _, _, _)),
+    asserta(swipl_debug_adapter_source_breakpoint(BP, Clause, PC, Cond, 0, Hit, Log)),
+    da_frame_evaluate(FR, Cond, Result, _),
+    swipl_debug_adapter_breakpoint_action(BP, FR, Result, Log, Action).
+swipl_debug_adapter_break_hook(BP, Clause, PC, _FR, _BFR, _Expression, Cond, Hit0, Hit, Log, continue) :-
+    retractall(swipl_debug_adapter_source_breakpoint(BP, _, _, _, _, _, _)),
+    Hit1 is Hit0 + 1,
+    asserta(swipl_debug_adapter_source_breakpoint(BP, Clause, PC, Cond, Hit1, Hit, Log)).
+
+
+:- det(swipl_debug_adapter_breakpoint_action/5).
+swipl_debug_adapter_breakpoint_action( BP, _FR, true, null, trace   ) :- !,
+    retractall(swipl_debug_adapter_last_action(_)),
+    asserta(swipl_debug_adapter_last_action(breakpoint(BP))).
+swipl_debug_adapter_breakpoint_action(_BP, _FR, _   , null               , continue) :- !.
+swipl_debug_adapter_breakpoint_action( BP,  FR, true, log_message(String), continue) :- !,
+    da_frame_variables_mapping(FR, Map),
+    print_message(trace, log_message(BP, Map, String)).
+swipl_debug_adapter_breakpoint_action(_BP, _FR, _   , _                  , continue).
+
+
+:- det(da_breakpoints_set/3).
+da_breakpoints_set(path(Path), Req, Res) :-
+    user:ensure_loaded(Path),
+    forall(da_breakpoint_path(BP, Path),
+           da_breakpoint_delete(BP)),
+    phrase(da_breakpoints_set(Req, path(Path)), Res).
+
+
+da_breakpoint_delete(BP) :-
+    catch(ignore(prolog_breakpoints:delete_breakpoint(BP)), _, true),
+    retractall(swipl_debug_adapter_source_breakpoint(BP, _, _, _, _, _, _)).
+
+
+da_breakpoint_path(BP, Path) :-
+    prolog_breakpoints:breakpoint_property(BP, file(Path)).
+
+
+da_breakpoints_set([   ], _) --> [].
+da_breakpoints_set([H|T], P) --> da_breakpoint_set(H, P), da_breakpoints_set(T, P).
+
+
+:- det(da_breakpoint_set/4).
+da_breakpoint_set(source_breakpoint(L0, C0, Cond, Hit, Log), path(P)) -->
+    {   prolog_breakpoints:set_breakpoint(P, L0, C0, BP)   },
+    !,
+    {   prolog_breakpoints:known_breakpoint(Clause, PC, _, BP),
+        asserta(swipl_debug_adapter_source_breakpoint(BP, Clause, PC, Cond, 0, Hit, Log)),
+        prolog_breakpoints:breakpoint_property(BP, character_range(A, L)),
+        Z is A + L,
+        da_source_file_offsets_line_column_pairs(path(P), [A, Z], [SL-SC, EL-EC])
+    },
+    [   breakpoint(BP, true, null, span(path(P), SL, SC, EL, EC))   ].
+da_breakpoint_set(_, _) --> [].

@@ -88,6 +88,7 @@ session_next(Session0, Session) :-
     session_in(Session0, I),
     dap_read(I, R),
     _{ type : Type0 } :< R,
+    debug(dap(session), "Received message ~w : ~w", [Type0, R]),
     atom_string(Type, Type0),
     session_see(Type, R, Session0, Session).
 

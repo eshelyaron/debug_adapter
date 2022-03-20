@@ -17,14 +17,6 @@
 :- use_module(library(http/json)).
 :- use_module(library(settings)).
 
-:- setting(default_request_timeout,
-           number,
-           5,
-           'Default time to wait for DAP server to respond, given in seconds').
-:- setting(initial_request_seq,
-           integer,
-           1,
-           'Initial `seq` field value for DAP requests').
 
 dap_read(In, Message) :-
     read_line_to_string(In, Line),
