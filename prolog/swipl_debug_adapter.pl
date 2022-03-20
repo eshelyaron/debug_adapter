@@ -60,6 +60,15 @@ swipl_debug_adapter_command_callback(stackTrace, Arguments, ReqSeq, _Handle, con
     catch((thread_send_message(ThreadId, stack_trace(ReqSeq)), Threads = Threads0),
           _,
           Threads = Threads1).
+swipl_debug_adapter_command_callback(stepInTargets, Arguments, ReqSeq, _Handle, configured(Threads0), configured(Threads)) :-
+    !,
+    debug(dap(swipl), "Handling stepInTargets request", []),
+    _{ frameId : FrameId } :< Arguments,
+    include({ReqSeq, FrameId}/[T]>>catch(thread_send_message(T, step_in_targets(ReqSeq, FrameId)),
+                                         _,
+                                         fail),
+            Threads0,
+            Threads).
 swipl_debug_adapter_command_callback(stepIn, Arguments, ReqSeq, _Handle, configured(Threads0), configured(Threads)) :-
     !,
     debug(dap(swipl), "Handling stepIn request", []),
@@ -415,6 +424,12 @@ swipl_debug_adapter_handle_message(disconnect, _Port, _Frame, _Choice, Handle, n
     da_sdk_event(Handle, continued, _{threadId:Id}),
     retractall(swipl_debug_adapter_last_action(_)),
     asserta(swipl_debug_adapter_last_action(continue)).
+swipl_debug_adapter_handle_message(step_in_targets(ReqSeq, FrameId), Port, Frame, Choice, Handle, Action) :-
+    !,
+    da_frame_step_in_targets(FrameId, Frame, Choice, Targets),
+    maplist(swipl_debug_adapter_translate_step_in_target, Targets, DAPTargets),
+    da_sdk_response(Handle, ReqSeq, stepInTargets, _{targets:DAPTargets}),
+    swipl_debug_adapter_handle_messages(Port, Frame, Choice, Handle, Action).
 swipl_debug_adapter_handle_message(step_in(ReqSeq, 0), _Port, _Frame, _Choice, Handle, continue) :-
     !,
     da_sdk_response(Handle, ReqSeq, stepIn),
@@ -524,6 +539,12 @@ swipl_debug_adapter_translate_inframe_label(port(Port), DAPLabel) :-
     atom_string(PortName, DAPLabel).
 swipl_debug_adapter_translate_inframe_label(pc(PC), DAPLabel) :-
     number_string(PC, DAPLabel).
+
+
+swipl_debug_adapter_translate_step_in_target(step_in_target(Id, null), _{ id    : Id,
+                                                                          label : "step" }) :- !.
+swipl_debug_adapter_translate_step_in_target(step_in_target(Id, _Alt), _{ id    : Id,
+                                                                          label : "fail" }).
 
 
 prolog:break_hook(Clause, PC, FR, BFR, Expression, Action) :-
