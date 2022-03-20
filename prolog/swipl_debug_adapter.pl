@@ -136,8 +136,10 @@ swipl_debug_adapter_launch_thread(Args, Handle, ThreadId) :-
     thread_get_message(started(PrologThreadId)),
     thread_property(PrologThreadId, id(ThreadId)).
 
+
 :- det(swipl_debug_adapter_debugee/4).
 swipl_debug_adapter_debugee(ModulePath, GoalString, ServerThreadId, Handle) :-
+    debug(dap(swipl), "Starting debuggee thread ~w ~w", [ModulePath, GoalString]),
     thread_self(Self),
     thread_send_message(ServerThreadId, started(Self)),
     thread_property(Self, id(Id)),
@@ -150,6 +152,7 @@ swipl_debug_adapter_debugee(ModulePath, GoalString, ServerThreadId, Handle) :-
     ->  qualified(QGoal, Module, Goal)
     ;   QGoal = Goal
     ),
+    debug(dap(swipl), "Tracing debuggee goal ~w", [QGoal]),
     swipl_debug_adapter_trace(QGoal, VarNames, Handle).
 
 
