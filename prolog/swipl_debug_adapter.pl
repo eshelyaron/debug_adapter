@@ -13,7 +13,6 @@ swipl_debug_adapter_command_callback(disconnect, _Arguments, ReqSeq, Handle, [],
     !,
     debug(dap(swipl), "Disconnecting", []),
     da_sdk_response(Handle, ReqSeq, disconnect),
-    da_sdk_event(Handle, exited),
     da_sdk_stop(Handle).
 swipl_debug_adapter_command_callback(initialize, Arguments, ReqSeq, Handle, [], initialized(Arguments)) :-
     !,
@@ -58,12 +57,31 @@ swipl_debug_adapter_command_callback(stackTrace, Arguments, ReqSeq, _Handle, con
     catch((thread_send_message(ThreadId, stack_trace(ReqSeq)), Threads = Threads0),
           _,
           Threads = Threads1).
+swipl_debug_adapter_command_callback(stepIn, Arguments, ReqSeq, _Handle, configured(Threads0), configured(Threads)) :-
+    !,
+    debug(dap(swipl), "Handling stepIn request", []),
+    _{ threadId : ThreadId } :< Arguments,
+    select(ThreadId, Threads0, Threads1),
+    (   get_dict(targetId, Arguments, Target)
+    ->  true
+    ;   Target = 0
+    ),
+    catch((thread_send_message(ThreadId, stepIn(ReqSeq, Target)), Threads = Threads0),
+          _,
+          Threads = Threads1).
+swipl_debug_adapter_command_callback(next, Arguments, ReqSeq, _Handle, configured(Threads0), configured(Threads)) :-
+    !,
+    debug(dap(swipl), "Handling next request", []),
+    _{ threadId : ThreadId } :< Arguments,
+    select(ThreadId, Threads0, Threads1),
+    catch((thread_send_message(ThreadId, next(ReqSeq)), Threads = Threads0),
+          _,
+          Threads = Threads1).
 swipl_debug_adapter_command_callback(disconnect, _Arguments, ReqSeq, Handle, configured(Threads), disconnected) :-
     !,
     debug(dap(swipl), "disconnecting", []),
     maplist([T]>>catch(thread_send_message(T, disconnect), _, true), Threads),
     da_sdk_response(Handle, ReqSeq, disconnect),
-    da_sdk_event(Handle, exited),
     da_sdk_stop(Handle).
 swipl_debug_adapter_command_callback(continue, Arguments, ReqSeq, Handle, configured(Threads), configured(Threads)) :-
     !,
@@ -116,21 +134,76 @@ swipl_debug_adapter_debugee(ModulePath, GoalString, ServerThreadId, Handle) :-
     swipl_debug_adapter_trace(QGoal, VarNames, Handle).
 
 
+swipl_debug_adapter_translate_exit_code(true        , 0) :- !.
+swipl_debug_adapter_translate_exit_code(false       , 1) :- !.
+swipl_debug_adapter_translate_exit_code(exception(_), 2) :- !.
+
+
 :- thread_local
    swipl_debug_adapter_handle/1,
    swipl_debug_adapter_last_action/1,
    swipl_debug_adapter_function_breakpoint/1.
 
 
-:- det(swipl_debug_adapter_trace/3).
-swipl_debug_adapter_trace(QGoal, _VarNames, Handle) :-
+:- det(swipl_debug_adapter_trace/4).
+swipl_debug_adapter_trace(QGoal, VarNames, Handle) :-
     asserta(swipl_debug_adapter_handle(Handle)),
     asserta(swipl_debug_adapter_last_action(entry)),
+    asserta((user:thread_message_hook(Term, Kind, Lines) :-
+                 swipl_debug_adapter_message_hook(Term, Kind, Lines),
+                 fail)),
     set_prolog_flag(gui_tracer, true),
     visible([+call, +exit, +fail, +redo, +unify, +cut_call, +cut_exit, +exception]),
     prolog_skip_level(_, very_deep),
-    debug(dap(tracer), "Debugee qualified goal ~w", [QGoal]),
-    trace, QGoal, notrace.
+    swipl_debug_adapter_goal_reified_result(QGoal, VarNames, Result),
+    thread_self(Self),
+    thread_property(Self, id(Id)),
+    da_sdk_event(Handle, thread, _{ reason   : "exited",
+                                    threadId : Id }),
+    swipl_debug_adapter_translate_exit_code(Result, ExitCode),
+    da_sdk_event(Handle, exited, _{ exitCode : ExitCode }).
+
+
+swipl_debug_adapter_goal_reified_result(Goal, VarNames, Result) :-
+    catch((   trace, Goal, notrace
+          ->  print_message(trace, da_tracer_top_level_query(true(VarNames))),
+              Result = true
+          ;   notrace,
+              print_message(trace, da_tracer_top_level_query(false)),
+              Result = false
+          ),
+          Catcher,
+          (notrace,
+           print_message(trace, da_tracer_top_level_query(exception(Catcher))),
+           Result = exception(Catcher)
+          )
+         ).
+
+
+:- det(swipl_debug_adapter_message_hook/3).
+swipl_debug_adapter_message_hook(_   , silent, _) :- !.
+swipl_debug_adapter_message_hook(Term, _     , _) :-
+    swipl_debug_adapter_handle(Handle),
+    message_to_string(Term, String0),
+    string_concat(String0, "\n", String),
+    da_sdk_event(Handle, output, _{output:String, category:"stdout"}).
+
+
+:- multifile prolog:message//1.
+
+prolog:message(da_tracer_top_level_query(true([]))) -->
+    !,
+    [ 'true.'-[] ].
+prolog:message(da_tracer_top_level_query(true(VarNames))) -->
+    !,
+    [ '~p'-[VarNames], nl ],
+    [ 'true.'-[] ].
+prolog:message(da_tracer_top_level_query(false)) -->
+    !,
+    [ 'false.'-[] ].
+prolog:message(da_tracer_top_level_query(exception(E))) -->
+    !,
+    [ 'unhandled exception: ~w.'-[E] ].
 
 
 qualified(Module:UnqualifiedGoal, Module, UnqualifiedGoal) :-
@@ -182,9 +255,7 @@ swipl_debug_adapter_handle_message(continue, _Port, _Frame, _Choice, Handle, con
     asserta(swipl_debug_adapter_last_action(continue)).
 swipl_debug_adapter_handle_message(stack_trace(ReqSeq), Port, Frame, Choice, Handle, Action) :-
     !,
-    debug(dap(tracer), "Getting stack trace", []),
     swipl_debug_adapter_stack_trace(Port, Frame, Choice, StackFrames),
-    debug(dap(tracer), "Got stack trace ~w", [StackFrames]),
     da_sdk_response(Handle, ReqSeq, stackTrace, _{stackFrames:StackFrames}),
     swipl_debug_adapter_handle_messages(Port, Frame, Choice, Handle, Action).
 swipl_debug_adapter_handle_message(disconnect, _Port, _Frame, _Choice, Handle, nodebug) :-
@@ -194,6 +265,22 @@ swipl_debug_adapter_handle_message(disconnect, _Port, _Frame, _Choice, Handle, n
     da_sdk_event(Handle, continued, _{threadId:Id}),
     retractall(swipl_debug_adapter_last_action(_)),
     asserta(swipl_debug_adapter_last_action(continue)).
+swipl_debug_adapter_handle_message(stepIn(ReqSeq, 0), _Port, _Frame, _Choice, Handle, continue) :-
+    !,
+    da_sdk_response(Handle, ReqSeq, stepIn),
+    retractall(swipl_debug_adapter_last_action(_)),
+    asserta(swipl_debug_adapter_last_action(step_in)).
+swipl_debug_adapter_handle_message(stepIn(ReqSeq, 1), _Port, _Frame, _Choice, Handle, fail) :-
+    !,
+    da_sdk_response(Handle, ReqSeq, stepIn),
+    retractall(swipl_debug_adapter_last_action(_)),
+    asserta(swipl_debug_adapter_last_action(step_in)).
+swipl_debug_adapter_handle_message(next(ReqSeq), _Port, _Frame, _Choice, Handle, skip) :-
+    !,
+    da_sdk_response(Handle, ReqSeq, next),
+    retractall(swipl_debug_adapter_last_action(_)),
+    asserta(swipl_debug_adapter_last_action(next)).
+
 
 swipl_debug_adapter_stopped_reason(exception(E), _, _            , _{reason:exception, description:D}) :- !, term_string(E, D).
 swipl_debug_adapter_stopped_reason(call        , _, entry        , _{reason:entry}) :- !.

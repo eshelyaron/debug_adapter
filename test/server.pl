@@ -20,39 +20,6 @@ user:term_expansion((script(Name) :- Body),
 
 :- begin_tests(server).
 
-
-%% script(disconnect) :-
-%%     reqres("disconnect"),
-%%     event("exited").
-
-%% script(initialize) :-
-%%     reqres("initialize"),
-%%     reqres("disconnect"),
-%%     event("exited").
-
-%% script(launch) :-
-%%     reqres("initialize"),
-%%     call(cwd(CWD)),
-%%     reqres("launch", _{ cwd    : CWD,
-%%                         module : "./target/foo.pl",
-%%                         goal   : "foo"
-%%                       }),
-%%     event("initialized"),
-%%     reqres("disconnect"),
-%%     event("exited").
-
-%% script(configurationDone) :-
-%%     reqres("initialize"),
-%%     event("initialized"),
-%%     reqres("configurationDone"),
-%%     call(cwd(CWD)),
-%%     reqres("launch", _{ cwd    : CWD,
-%%                         module : "./target/foo.pl",
-%%                         goal   : "foo"
-%%                       }),
-%%     reqres("disconnect"),
-%%     event("exited").
-
 %% script(sourceBreakpoint) :-
 %%     reqres("initialize"),
 %%     call(cwd(CWD)),
