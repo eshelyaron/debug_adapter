@@ -29,6 +29,13 @@ main(Argv) :-
        shortflags([d]),
        longflags([debug]),
        help('Print debug messages to stderr')
+      ],
+      [opt(timeout),
+       default(3600),
+       type(integer),
+       shortflags(['T']),
+       longflags([timeout]),
+       help('Set a global timeout after which the server aborts. Useful for CI')
       ]
     ],
 
@@ -43,5 +50,6 @@ main(Argv) :-
       ),
       current_input(In),
       current_output(Out),
-      da_server([in(In), out(Out), on_command(swipl_debug_adapter_command_callback)])
+      option(timeout(Timeout), Opts),
+      da_server([in(In), out(Out), on_command(swipl_debug_adapter_command_callback), timeout(Timeout)])
     ).
