@@ -174,6 +174,7 @@ swipl_debug_adapter_trace(QGoal, VarNames, Handle) :-
     set_prolog_flag(gui_tracer, true),
     visible([+call, +exit, +fail, +redo, +unify, +cut_call, +cut_exit, +exception]),
     prolog_skip_level(_, very_deep),
+    debug(dap(swipl), "Calling ~w", [QGoal]),
     swipl_debug_adapter_goal_reified_result(QGoal, VarNames, Result),
     thread_self(Self),
     thread_property(Self, id(Id)),
