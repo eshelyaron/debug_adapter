@@ -1,0 +1,20 @@
+request :- initialize.
+event   :- initialized.
+request :- setExceptionBreakpoints: _{ filters : ["true"] } ;
+           configurationDone ;
+           launch: _{ cwd    : WD,
+                      module : "./target/exception.pl",
+                      goal   : "spam"
+                    }.
+event   :- stopped:< _{ threadId : Id, reason : "entry"}.
+request :- exceptionInfo : _{ threadId : Id }
+           ->
+           false : "No exceptionInfo available" ;
+           continue: _{ threadId : Id }.
+event   :- stopped:< _{ threadId : Id, reason : "exception", description : "ball"}.
+request :- exceptionInfo : _{ threadId : Id }
+           ->
+           true : _{ description : "ball", exceptionId : "ball" } ;
+           continue: _{ threadId : Id }.
+event   :- exited :< _{ exitCode : 2 }.
+request :- disconnect.

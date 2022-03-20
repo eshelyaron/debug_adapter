@@ -52,6 +52,14 @@ swipl_debug_adapter_command_callback(threads, _Arguments, ReqSeq, Handle, config
     maplist(number_string, Threads, Names),
     maplist([I,N,_{id:I,name:N}]>>true, Threads, Names, Ts),
     da_sdk_response(Handle, ReqSeq, threads, _{threads:Ts}).
+swipl_debug_adapter_command_callback(exceptionInfo, Arguments, ReqSeq, _Handle, configured(Threads0), configured(Threads)) :-
+    !,
+    debug(dap(swipl), "Handling exceptionInfo request", []),
+    _{ threadId : ThreadId } :< Arguments,
+    select(ThreadId, Threads0, Threads1),
+    catch((thread_send_message(ThreadId, exception_info(ReqSeq)), Threads = Threads0),
+          _,
+          Threads = Threads1).
 swipl_debug_adapter_command_callback(stackTrace, Arguments, ReqSeq, _Handle, configured(Threads0), configured(Threads)) :-
     !,
     debug(dap(swipl), "Handling stackTrace request", []),
@@ -424,6 +432,14 @@ swipl_debug_adapter_handle_message(disconnect, _Port, _Frame, _Choice, Handle, n
     da_sdk_event(Handle, continued, _{threadId:Id}),
     retractall(swipl_debug_adapter_last_action(_)),
     asserta(swipl_debug_adapter_last_action(continue)).
+swipl_debug_adapter_handle_message(exception_info(ReqSeq), Port, Frame, Choice, Handle, Action) :-
+    !,
+    (   Port = exception(Exception)
+    ->  term_string(Exception, String),
+        da_sdk_response(Handle, ReqSeq, exceptionInfo, _{exceptionId:String, description:String})
+    ;   da_sdk_error(Handle, ReqSeq, exceptionInfo, "No exceptionInfo available")
+    ),
+    swipl_debug_adapter_handle_messages(Port, Frame, Choice, Handle, Action).
 swipl_debug_adapter_handle_message(step_in_targets(ReqSeq, FrameId), Port, Frame, Choice, Handle, Action) :-
     !,
     da_frame_step_in_targets(FrameId, Frame, Choice, Targets),
