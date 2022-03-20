@@ -14,5 +14,8 @@ request :- threads -> true: _{threads: [_{id: Id, name: _}]} ;
               name: "foo:foo/0",
               instructionPointerReference: "call"
             } :< ActiveFrame.
+request :- continue :  _{ threadId : Id }.
+event   :- continued:< _{ threadId : Id }      ;
+           output   :< _{ output   : "true.\n" } ;
+           exited   :< _{ exitCode : 0  }.
 request :- disconnect.
-event   :- exited.
