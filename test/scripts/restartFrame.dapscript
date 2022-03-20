@@ -1,0 +1,37 @@
+request :- initialize.
+event   :- initialized.
+request :- configurationDone.
+request :- launch   :  _{ cwd : WD, module : "./target/foo.pl", goal : "foo" }.
+event   :- stopped :<  _{ threadId : Id, reason : "entry" }.
+request :- threads -> true: _{threads: [_{id: Id, name: _}]} ;
+           stackTrace : _{ threadId : Id }
+           *->
+           true       : _{ stackFrames: [CallActiveFrame] }.
+        ?- _{ line: 11,
+              column: 0,
+              endLine: 14,
+              endColumn: 12,
+              name: "foo:foo/0",
+              instructionPointerReference: "call"
+            } :< CallActiveFrame.
+request :- stepIn   :   _{ threadId : Id } ;
+           stepIn   :   _{ threadId : Id } ;
+           stackTrace : _{ threadId : Id }
+           *->
+           true       : _{ stackFrames: [_, ParentFrame|_] }.
+        ?- _{ line: 12,
+              column: 4,
+              endLine: 12,
+              endColumn: 58,
+              name: "foo:foo/0",
+              id : ParentFrameId
+            } :< ParentFrame.
+request :- restartFrame : _{ frameId : ParentFrameId }.
+event   :- stopped  :<  _{ threadId : Id, reason : "restart" }.
+request :- stackTrace : _{ threadId : Id }
+           *->
+           true       : _{ stackFrames: [CallActiveFrame] }.
+request :- continue : _{ threadId : Id }.
+event   :- output :< _{ output   : "true.\n" } ;
+           exited :< _{ exitCode : 0         }.
+request :- disconnect.
