@@ -1,9 +1,10 @@
 request :- initialize.
 event   :- initialized.
+        ?- string_concat(WD, "/target/breakpoint.pl", Path).
 request :- setBreakpoints: _{ breakpoints    : [_{line : 8}],
                               lines          : [8],
                               source         : _{ name : "breakpoint.pl",
-                                                  path : "./target/breakpoint.pl"
+                                                  path : Path
                                                 },
                               sourceModified : false }
            ->
