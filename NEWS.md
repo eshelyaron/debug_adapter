@@ -1,3 +1,63 @@
+# What's new in SWI-Prolog Debug Adapter version 0.7.0
+
+The following changes were introduced since version 0.6.3 of the
+`debug_adapter` package:
+
+## Generalized DAP server interface
+
+Version 0.7.0 brings with it a major refactor of the `debug_adapter`
+package code-base intended to facilitate reuse of the provided
+implementation of the DAP specification for debugging different
+_target languages_.  This is mostly envisioned to benefit languages
+and extensions implemented on top of SWI-Prolog, where the
+implementation of a DAP server from scratch may not seem
+cost-effective. With the new generalized interface provided in
+`library(debug_adapter)`, such languages can gain DAP support that is
+specific to their syntax and semantics by implementing a
+simple callback based interface that abstracts away many details of
+implementing a DAP server.
+
+The interface currently consists of a single "callback" predicate that
+needs to be implemented for each new DAP server. This predicate is
+passed to `da_server/1`, the main entry point for running a DAP
+server. `da_server/1` is completely unaware of the specifics of the
+target language though, and relies on the provided callback for
+handling incoming DAP requests after. For more details see the
+documentation in `library(debug_adapter/server)` for more details.
+
+All of the logic that is specific for debugging SWI-Prolog (for which
+SWI-Prolog is the _target_ language, not merely the implementation
+language) has been moved from `library(debug_adapter)` to
+`library(swipl_debug_adapter)`. A large portion of the SWI-Prolog
+debug adapter server has been rewritten in order to adhere to the new
+interface, without any known regressions or noticeable modifications
+in terms of the user/client facing behavior of the server (see next
+section about testing).
+
+
+## Smarter and more comprehensive test-suite
+
+As noted in the previous section, the changes introduced in version
+0.7.0 touched a lot of code are intended to be fully backwards
+compatible. To minimize regressions, end-to-end tests where created
+for each of the supported features, providing much greater test
+coverage compared to prior versions.
+
+In order to streamline writing end-to-end tests,
+`library(debug_adapter)` was enhanced with a powerful DAP _client_
+implementation, which supports a nice little DSL for writing so-called
+DAP _scripts_. The DSL, called simply `dapscript`, is implemented in
+`library(debug_adapter/script)` and facilitates describing and
+executing elaborate debugging _sessions_ with an external DAP server
+started in a separate process. Hence it can be used for testing (or,
+more generally, programming) any DAP server.
+
+`dapscript` will hopefully be thoroughly documented in the
+future. Many examples can be found in the [`test/scripts` subdirectory
+of the `debug_adapter` git
+repository](https://github.com/eshelyaron/debug_adapter/tree/main/test/scripts).
+
+
 # What's new in SWI-Prolog Debug Adapter version 0.6.3
 
 The following changes were introduced since version 0.6.0 of the
