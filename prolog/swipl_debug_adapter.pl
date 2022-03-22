@@ -425,6 +425,23 @@ swipl_debug_adapter_message_hook(Term, _     , _) :-
     da_sdk_event(Handle, output, _{output:String, category:"stdout"}).
 
 
+:- multifile prolog:open_source_hook/3.
+
+prolog:open_source_hook(Path, Stream, _Options) :-
+    (   swipl_debug_adapter_handle(Handle)
+    ->  (   source_file(Path)
+        ->  Reason = "new"
+        ;   Reason = "changed"
+        ),
+	file_base_name(Path, BaseName),
+	da_sdk_event(Handle, loadedSource, _{ reason : Reason,
+                                              source : _{ name : BaseName,
+                                                          path : Path }})
+    ;   true
+    ),
+    open(Path, read, Stream).
+
+
 :- multifile prolog:message//1.
 
 prolog:message(da_tracer_top_level_query(true([]))) -->
