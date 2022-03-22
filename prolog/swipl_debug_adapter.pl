@@ -7,10 +7,10 @@
 
 :- use_module(library(debug_adapter/compat)).
 :- use_module(library(debug_adapter/sdk)).
-:- use_module(library(debug_adapter/stack)).
-:- use_module(library(debug_adapter/source)).
-:- use_module(library(debug_adapter/frame)).
-:- use_module(library(debug_adapter/clause)).
+:- use_module(library(swipl_debug_adapter/stack)).
+:- use_module(library(swipl_debug_adapter/source)).
+:- use_module(library(swipl_debug_adapter/frame)).
+:- use_module(library(swipl_debug_adapter/clause)).
 
 
 swipl_debug_adapter_command_callback(disconnect, _Arguments, ReqSeq, Handle, [], disconnected) :-
@@ -202,7 +202,7 @@ swipl_debug_adapter_command_callback(setBreakpoints, Arguments, ReqSeq, Handle, 
      } :< Arguments,
     dap_source_path(DAPSource, Path),
     maplist(swipl_debug_adapter_translate_source_breakpoint(Path), DAPReqBreakpoints, ReqBreakpoints),
-    da_breakpoints_set(Path, ReqBreakpoints, ResBreakpoints),
+    swipl_debug_adapter_breakpoints_set(Path, ReqBreakpoints, ResBreakpoints),
     maplist(swipl_debug_adapter_translate_result_breakpoint, ResBreakpoints, DAPBreakpoints),
     da_sdk_response(Handle, ReqSeq, setBreakpoints, _{breakpoints:DAPBreakpoints}).
 swipl_debug_adapter_command_callback(disconnect, _Arguments, ReqSeq, Handle, configured(Threads), disconnected) :-
@@ -681,29 +681,29 @@ swipl_debug_adapter_breakpoint_action( BP,  FR, true, log_message(String), conti
 swipl_debug_adapter_breakpoint_action(_BP, _FR, _   , _                  , continue).
 
 
-:- det(da_breakpoints_set/3).
-da_breakpoints_set(path(Path), Req, Res) :-
+:- det(swipl_debug_adapter_breakpoints_set/3).
+swipl_debug_adapter_breakpoints_set(path(Path), Req, Res) :-
     user:ensure_loaded(Path),
-    forall(da_breakpoint_path(BP, Path),
-           da_breakpoint_delete(BP)),
-    phrase(da_breakpoints_set(Req, path(Path)), Res).
+    forall(swipl_debug_adapter_breakpoint_path(BP, Path),
+           swipl_debug_adapter_breakpoints_delete(BP)),
+    phrase(swipl_debug_adapter_breakpoints_set(Req, path(Path)), Res).
 
 
-da_breakpoint_delete(BP) :-
+swipl_debug_adapter_breakpoints_delete(BP) :-
     catch(ignore(prolog_breakpoints:delete_breakpoint(BP)), _, true),
     retractall(swipl_debug_adapter_source_breakpoint(BP, _, _, _, _, _, _)).
 
 
-da_breakpoint_path(BP, Path) :-
+swipl_debug_adapter_breakpoint_path(BP, Path) :-
     prolog_breakpoints:breakpoint_property(BP, file(Path)).
 
 
-da_breakpoints_set([   ], _) --> [].
-da_breakpoints_set([H|T], P) --> da_breakpoint_set(H, P), da_breakpoints_set(T, P).
+swipl_debug_adapter_breakpoints_set([   ], _) --> [].
+swipl_debug_adapter_breakpoints_set([H|T], P) --> swipl_debug_swipl_breakpoint_set(H, P), swipl_debug_adapter_breakpoints_set(T, P).
 
 
-:- det(da_breakpoint_set/4).
-da_breakpoint_set(source_breakpoint(L0, C0, Cond, Hit, Log), path(P)) -->
+:- det(swipl_debug_swipl_breakpoint_set/4).
+swipl_debug_swipl_breakpoint_set(source_breakpoint(L0, C0, Cond, Hit, Log), path(P)) -->
     {   prolog_breakpoints:set_breakpoint(P, L0, C0, BP)   },
     !,
     {   prolog_breakpoints:known_breakpoint(Clause, PC, _, BP),
@@ -713,4 +713,4 @@ da_breakpoint_set(source_breakpoint(L0, C0, Cond, Hit, Log), path(P)) -->
         da_source_file_offsets_line_column_pairs(path(P), [A, Z], [SL-SC, EL-EC])
     },
     [   breakpoint(BP, true, null, span(path(P), SL, SC, EL, EC))   ].
-da_breakpoint_set(_, _) --> [].
+swipl_debug_swipl_breakpoint_set(_, _) --> [].
