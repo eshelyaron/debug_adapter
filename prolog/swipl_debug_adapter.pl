@@ -102,6 +102,24 @@ swipl_debug_adapter_command_callback(evaluate, Arguments, ReqSeq, _Handle, confi
                                          fail),
             Threads0,
             Threads).
+swipl_debug_adapter_command_callback(scopes, Arguments, ReqSeq, _Handle, configured(Threads0), configured(Threads)) :-
+    !,
+    debug(dap(swipl), "Handling scopes request", []),
+    _{ frameId : FrameId } :< Arguments,
+    include({ReqSeq, FrameId}/[T]>>catch(thread_send_message(T, scopes(ReqSeq, FrameId)),
+                                         _,
+                                         fail),
+            Threads0,
+            Threads).
+swipl_debug_adapter_command_callback(variables, Arguments, ReqSeq, _Handle, configured(Threads0), configured(Threads)) :-
+    !,
+    debug(dap(swipl), "Handling variables request", []),
+    _{ variablesReference : VariablesRef } :< Arguments,
+    include({ReqSeq, VariablesRef}/[T]>>catch(thread_send_message(T, variables(ReqSeq, VariablesRef)),
+                                         _,
+                                         fail),
+            Threads0,
+            Threads).
 swipl_debug_adapter_command_callback(stepInTargets, Arguments, ReqSeq, _Handle, configured(Threads0), configured(Threads)) :-
     !,
     debug(dap(swipl), "Handling stepInTargets request", []),
@@ -277,6 +295,13 @@ swipl_debug_adapter_translate_source_breakpoint(P, D, source_breakpoint(L, C, Co
         )
     ;   Hit = 0
     ).
+
+
+swipl_debug_adapter_translate_variable(variable(Name, Value, VariablesRef),
+				       _{ name               : Name,
+					  variablesReference : VariablesRef,
+					  value              : Value }).
+
 
 swipl_debug_adapter_translate_result_breakpoint(breakpoint(Id, Verified, Message, SourceSpan),
                                                 _{ id                 : Id,
@@ -476,9 +501,7 @@ swipl_debug_adapter_handle_message(exception_info(ReqSeq), Port, Frame, Choice, 
     swipl_debug_adapter_handle_messages(Port, Frame, Choice, Handle, Action).
 swipl_debug_adapter_handle_message(evaluate(ReqSeq, FrameId, SourceTerm), Port, Frame, Choice, Handle, Action) :-
     !,
-    debug(dap(swipl), "Evaluating goal ~w in frame ~w", [SourceTerm, FrameId]),
     da_frame_evaluate(FrameId, SourceTerm, Result, Bindings),
-    debug(dap(swipl), "Output bindings ~w", [Bindings]),
     format(string(Res), "~w~n~w.", [Bindings, Result]),
     da_sdk_response(Handle, ReqSeq, evaluate, _{result:Res, variablesReference:0}),
     swipl_debug_adapter_handle_messages(Port, Frame, Choice, Handle, Action).
@@ -487,6 +510,18 @@ swipl_debug_adapter_handle_message(step_in_targets(ReqSeq, FrameId), Port, Frame
     da_frame_step_in_targets(FrameId, Frame, Choice, Targets),
     maplist(swipl_debug_adapter_translate_step_in_target, Targets, DAPTargets),
     da_sdk_response(Handle, ReqSeq, stepInTargets, _{targets:DAPTargets}),
+    swipl_debug_adapter_handle_messages(Port, Frame, Choice, Handle, Action).
+swipl_debug_adapter_handle_message(scopes(ReqSeq, FrameId), Port, Frame, Choice, Handle, Action) :-
+    !,
+    da_frame_scopes(FrameId, Frame, Port, Scopes),
+    maplist(swipl_debug_adapter_translate_scope, Scopes, DAPScopes),
+    da_sdk_response(Handle, ReqSeq, scopes, _{scopes:DAPScopes}),
+    swipl_debug_adapter_handle_messages(Port, Frame, Choice, Handle, Action).
+swipl_debug_adapter_handle_message(variables(ReqSeq, VariablesRef), Port, Frame, Choice, Handle, Action) :-
+    !,
+    da_referenced_variables(VariablesRef, Variables),
+    maplist(swipl_debug_adapter_translate_variable, Variables, DAPVariables),
+    da_sdk_response(Handle, ReqSeq, variables, _{variables:DAPVariables}),
     swipl_debug_adapter_handle_messages(Port, Frame, Choice, Handle, Action).
 swipl_debug_adapter_handle_message(step_in(ReqSeq, 0), _Port, _Frame, _Choice, Handle, continue) :-
     !,
@@ -590,6 +625,18 @@ swipl_debug_adapter_translate_stack_frame(stack_frame(Id, InFrameLabel, PI, _Alt
     swipl_debug_adapter_translate_source_span(SourceSpan, DAPSource, SL, SC, EL, EC),
     swipl_debug_adapter_translate_inframe_label(InFrameLabel, DAPLabel).
 
+swipl_debug_adapter_translate_scope(scope(Name, VariablesRef, SourceSpan),
+				    _{ name               : Name,
+				       variablesReference : VariablesRef,
+				       expensive          : false,
+				       source             : DAPSource,
+				       line               : SL,
+				       column             : SC,
+				       endLine            : EL,
+				       endColumn          : EC
+				     }
+				   ) :-
+    swipl_debug_adapter_translate_source_span(SourceSpan, DAPSource, SL, SC, EL, EC).
 
 swipl_debug_adapter_translate_inframe_label(port(Port), DAPLabel) :-
     !,

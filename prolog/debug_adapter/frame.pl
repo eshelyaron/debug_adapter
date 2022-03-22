@@ -265,19 +265,21 @@ da_frame_scopes(ActiveFrameId, ActiveFrameId, Port, Scopes) :-
 da_frame_scopes(FrameId, _ActiveFrameId, _Port, Scopes) :-
     da_stack_frame_scopes(FrameId, Scopes).
 
-da_stack_frame_scopes(FrameId, [ scope("Goal Arguments", ArgumentsRef, SourceSpan),
+da_stack_frame_scopes(FrameId, [ scope(Name, ArgumentsRef, SourceSpan),
                                  scope("Local Bindings", LocalsRef, SourceSpan)
                                ]
                      ) :-
     da_frame_variables_reference_type(FrameId, ArgumentsRef, arguments),
     da_frame_variables_reference_type(FrameId, LocalsRef, locals),
-    da_frame_clause_source_span(FrameId, SourceSpan).
-da_active_frame_scopes(FrameId, unify, [scope("Goal Arguments", ArgumentsRef, SourceSpan)]) :-
+    da_frame_clause_source_span(FrameId, SourceSpan),
+    da_frame_predicate_indicator(FrameId, PI),
+    format(string(Name), "~w Arguments", PI).
+
+da_active_frame_scopes(FrameId, unify, Scopes) :-
     !,
-    da_frame_variables_reference_type(FrameId, ArgumentsRef, arguments),
-    da_frame_port_source_span(FrameId, unify, SourceSpan).
-da_active_frame_scopes(FrameId, Port, [ scope("Local Bindings", LocalsRef, LocalsSpan),
-                                        scope("Goal Arguments", ArgumentsRef, ArgumentsSpan)
+    da_stack_frame_scopes(FrameId, Scopes).
+da_active_frame_scopes(FrameId, Port, [ scope(Name, ArgumentsRef, ArgumentsSpan),
+					scope("Local Bindings", LocalsRef, LocalsSpan)
                                       ]
                       ) :-
     !,
@@ -289,7 +291,9 @@ da_active_frame_scopes(FrameId, Port, [ scope("Local Bindings", LocalsRef, Local
         da_frame_clause_source_span(ParentFrameId, LocalsSpan)
     ),
     da_frame_variables_reference_type(FrameId, ArgumentsRef, arguments),
-    da_frame_port_source_span(FrameId, Port, ArgumentsSpan).
+    da_frame_port_source_span(FrameId, Port, ArgumentsSpan),
+    da_frame_predicate_indicator(FrameId, PI),
+    format(string(Name), "~w Arguments", PI).
 
 
 :- use_module(library(clpfd)).
@@ -306,6 +310,7 @@ da_scope_type_id(arguments, 0) :- !.
 da_scope_type_id(locals, 1) :- !.
 da_scope_type_id(cached, 2).
 
+:- det(da_referenced_variables/2).
 da_referenced_variables(VariablesRef, Variables) :-
     da_frame_variables_reference_type(FrameId, VariablesRef, Type),
     (   Type == cached
@@ -338,10 +343,10 @@ indexed_arguments(I0, [H0|T0], [variable(Name, H, ChildrenReference)|T]) :-
     indexed_arguments(I1, T0, T).
 
 indexed_argument_name(I, N) :-
-    format(atom(N), "Arg#~w", [I]).
+    format(atom(N), "arg(~w)", [I]).
 
-da_term_factorized(Var, 0, '_') :-
-    var(Var),
+da_term_factorized(Var, 0, Name) :-
+    var(Var), format(string(Name), "~w", [Var]),
     !.
 da_term_factorized(Compound, Ref, Name) :-
     compound(Compound),
@@ -408,15 +413,10 @@ da_frame_locals(Frame, I, VarNames, Variables) :-
 
 :- det(da_frame_evaluate/4).
 da_frame_evaluate(FrameId, SourceTerm, Result, Bindings) :-
-    debug(dap(swipl), "Reading source term ~w", [SourceTerm]),
     read_term_from_atom(SourceTerm, Goal, [variable_names(Bindings)]),
-    debug(dap(swipl), "Read goal ~w with bindings ~w", [SourceTerm, Bindings]),
     da_frame_clause(FrameId, ClauseRef),
-    debug(dap(swipl), "Evaluating in clause ~w", [ClauseRef]),
     da_clause_variable_names(ClauseRef, ClauseVarNames),
-    debug(dap(swipl), "Unifying variables ~w ~w", [Bindings, ClauseVarNames]),
     da_frame_unify_variables(FrameId, ClauseVarNames, Bindings),
-    debug(dap(swipl), "Really evaluating ~w", [Goal]),
     da_evaluate(Goal, Result).
 
 
