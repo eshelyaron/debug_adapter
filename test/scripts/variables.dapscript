@@ -1,0 +1,59 @@
+request :- initialize.
+event   :- initialized.
+request :- configurationDone.
+request :- launch   :   _{ cwd : WD, module : "./target/local_variables.pl", goal : "arity_zero" }.
+event   :- stopped :<   _{ threadId : Id, reason : "entry" }.
+request :- threads
+	   ->
+	   true:        _{ threads: [_{id: Id, name: _}] } ;
+	   stackTrace : _{ threadId : Id }
+	   *->
+	   true       : _{ stackFrames: [ActiveFrame0|_] }.
+	?- _{ id : FrameId0 } :< ActiveFrame0.
+request :- scopes: _{ frameId : FrameId0 }
+	   ->
+	   true  : _{scopes: [ArgsScope0, LocalsScope0]}.
+	?- _{ variablesReference: ArgsRef0   , name: "arity_zero/0 Arguments" } :< ArgsScope0.
+	?- _{ variablesReference: LocalsRef0 , name: "Local Bindings"         } :< LocalsScope0.
+request :- variables: _{ variablesReference : ArgsRef0 }
+	   ->
+	   true  : _{variables: []} ;
+	   variables: _{ variablesReference : LocalsRef0 }
+	   ->
+	   true  : _{variables: [_{name: "A", value: _, variablesReference: 0},
+				 _{name: "B", value: _, variablesReference: 0},
+				 _{name: "X", value: _, variablesReference: 0},
+				 _{name: "Y", value: _, variablesReference: 0},
+				 _{name: "Z", value: _, variablesReference: 0}]} ;
+	   stepIn     : _{ threadId : Id } ;
+	   stepIn     : _{ threadId : Id } ;
+	   stepIn     : _{ threadId : Id } ;
+	   stepIn     : _{ threadId : Id } ;
+	   stepIn     : _{ threadId : Id } ;
+	   stepIn     : _{ threadId : Id } ;
+	   stepIn     : _{ threadId : Id } ;
+	   stepIn     : _{ threadId : Id } ;
+	   stackTrace : _{ threadId : Id }
+	   *->
+	   true       : _{ stackFrames: [ActiveFrame|_] }.
+	?- _{ id : FrameId } :< ActiveFrame.
+request :- scopes: _{ frameId : FrameId }
+	   ->
+	   true  : _{scopes: [ArgsScope, LocalsScope]}.
+	?- _{ variablesReference: ArgsRef   , name: "(=)/2 Arguments" } :< ArgsScope.
+	?- _{ variablesReference: LocalsRef , name: "Local Bindings"  } :< LocalsScope.
+request :- variables: _{ variablesReference : ArgsRef }
+	   ->
+	   true  : _{variables: [_{name:"arg(1)", value: _  , variablesReference: 0},
+				 _{name:"arg(2)", value: "2", variablesReference: 0}]} ;
+	   variables: _{ variablesReference : LocalsRef }
+	   ->
+	   true  : _{variables: [_{name: "A", value: _ , variablesReference: 0},
+				 _{name: "B", value: _ , variablesReference: 0},
+				 _{name: "X", value: "1", variablesReference: 0},
+				 _{name: "Y", value: _ , variablesReference: 0},
+				 _{name: "Z", value: _ , variablesReference: 0}]} ;
+	   continue : _{ threadId : Id }.
+event   :- output :< _{ output   : "true.\n" } ;
+	   exited :< _{ exitCode : 0         }.
+request :- disconnect.

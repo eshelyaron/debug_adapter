@@ -48,8 +48,8 @@ unify_vars([], Vars, Vars) :- !.
 unify_vars([H|T], Vars0, Vars) :-
     memberchk(H, Vars0), !,
     unify_vars(T, Vars0, Vars).
-unify_vars([H|T], Vars, [H|Vars]) :-
-    unify_vars(T, Vars, Vars).
+unify_vars([H|T], Vars0, [H|Vars]) :-
+    unify_vars(T, Vars0, Vars).
 
 execute_term(end_of_file, _, _, _).
 execute_term(?- Goal, In, Vars, Session) :-
