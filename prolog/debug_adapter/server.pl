@@ -29,7 +29,8 @@ specification](https://microsoft.github.io/debug-adapter-protocol/specification)
                                        setup(+callable),
                                        on_command(+callable),
                                        cleanup(+callable),
-                                       initial_state(+any)
+                                       initial_state(+any),
+                                       handle(+any)
                                      ]
                     ).
 
@@ -53,7 +54,7 @@ specification](https://microsoft.github.io/debug-adapter-protocol/specification)
 %      - _Command_ is an atom identyfing the type of the DAP request, e.g. =stepIn=.
 %      - _Arguments_ is either the atom =null= or a dict containing _Command_ -specific parameters.
 %      - _RequestSeq_ is an integer identifying the received request in the scope of the current session.
-%      - _Handle_ can be used to with the predicate from module =da_sdk= to
+%      - _Handle_ can be used to with the predicates from module =da_sdk= to
 %        communicate DAP messages (including the response for the handled command) back to the client.
 %      - _State0_ and _State_ can be used to pass arbitrary terms between invocations of _OnCommand_
 %        during the course of a DAP session. The session loop will initially call _OnCommand_ with
@@ -80,7 +81,8 @@ da_server(Options) :-
     set_stream(In, newline(detect)),
     set_stream(In, representation_errors(error)),
     set_stream(In, tty(false)),
-    message_queue_create(Q),
+    message_queue_create(Q0),
+    option(handle(Q), Options, Q0),
     da_server_listen(In, Q),
     set_stream(Out, buffer(false)),
     set_stream(Out, tty(false)),
@@ -109,7 +111,8 @@ da_server_handle(Out, Q, CB, stream(Message), Seq0, Seq, State0, State) :-
     ->  true
     ;   Arguments = null
     ),
-    (   call(CB, Command, Arguments, RequestSeq, Q, State0, State)
+    (   debug(dap(server), "Handling ~w request", [Command]),
+        call(CB, Command, Arguments, RequestSeq, Q, State0, State)
     ->  Seq = Seq0
     ;   State = State0,
         dap_error(Out, Seq0, RequestSeq, Command, "Bad request"),
