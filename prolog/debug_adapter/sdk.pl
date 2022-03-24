@@ -3,10 +3,11 @@
        [
            da_sdk_response/3,  % da_sdk_response(+Handle, +RequestSeq, +Command)
            da_sdk_response/4,  % da_sdk_response(+Handle, +RequestSeq, +Command, +Body)
-           da_sdk_error/4,     % da_sdk_response(+Handle, +RequestSeq, +Command, +Message)
-           da_sdk_event/2,     % da_sdk_response(+Handle, +Type)
-           da_sdk_event/3,     % da_sdk_response(+Handle, +Type, +Body)
-           da_sdk_stop/1       % da_sdk_response(+Handle)
+           da_sdk_error/4,     % da_sdk_error(+Handle, +RequestSeq, +Command, +Message)
+           da_sdk_event/2,     % da_sdk_event(+Handle, +Type)
+           da_sdk_event/3,     % da_sdk_event(+Handle, +Type, +Body)
+           da_sdk_request/3,   % da_sdk_request(+Handle, +Type, +Body)
+           da_sdk_stop/1       % da_sdk_stop(+Handle)
        ]
    ).
 

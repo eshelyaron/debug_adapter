@@ -231,6 +231,25 @@ dap_source_path(D, path(P)     ) :- _{ path            : P0 } :< D, !, absolute_
 dap_source_path(D, reference(R)) :- _{ sourceReference : R  } :< D.
 
 swipl_debug_adapter_launch_thread(Args, Handle, ThreadId) :-
+    _{ goal: "$run_in_terminal" } :< Args,
+    !,
+    thread_self(ServerThreadId),
+    tcp_socket(ServerSocket),
+    tcp_setopt(ServerSocket, reuseaddr),
+    tcp_bind(ServerSocket, Port),
+    thread_create(swipl_debug_adapter_top_level(ServerSocket, ServerThreadId, Handle), PrologThreadId),
+    number_string(Port, PortString),
+    working_directory(WD, WD),
+    da_sdk_request(Handle,
+                runInTerminal,
+                _{   kind  : "integrated",
+                     cwd   : WD,
+                     title : "Toplevel",
+                     args  : ["telnet",  "127.0.0.1", PortString]
+                 }),
+    thread_get_message(started(PrologThreadId)),
+    thread_property(PrologThreadId, id(ThreadId)).
+swipl_debug_adapter_launch_thread(Args, Handle, ThreadId) :-
     _{ cwd: CWD, module: ModulePath, goal: GoalString } :< Args,
     !,
     cd(CWD),
@@ -240,6 +259,46 @@ swipl_debug_adapter_launch_thread(Args, Handle, ThreadId) :-
     thread_get_message(started(PrologThreadId)),
     thread_property(PrologThreadId, id(ThreadId)).
 
+
+swipl_debug_adapter_top_level(ServerSocket, ServerThreadId, Handle) :-
+    thread_self(Self),
+    thread_send_message(ServerThreadId, started(Self)),
+    thread_property(Self, id(Id)),
+    da_sdk_event(Handle, thread, _{ reason   : "started",
+                                    threadId : Id }),
+    swipl_debug_adapter_top_level_setup(ServerSocket),
+    swipl_debug_adapter_terminal(Handle).
+
+
+:- det(swipl_debug_adapter_terminal/1).
+swipl_debug_adapter_terminal(Handle) :-
+    swipl_debug_adapter_setup(Handle, Ref),
+    user:prolog,
+    thread_self(Self),
+    thread_property(Self, id(Id)),
+    da_sdk_event(Handle, thread, _{ reason   : "exited",
+                                    threadId : Id }),
+    swipl_debug_adapter_translate_exit_code(Result, ExitCode),
+    da_sdk_event(Handle, exited, _{ exitCode : ExitCode }),
+    swipl_debug_adapter_cleanup(Ref).
+
+swipl_debug_adapter_top_level_setup(ServerSocket) :-
+    tcp_listen(ServerSocket, 5),
+    tcp_accept(ServerSocket, ClientSocket, ip(127,0,_,_)),
+    tcp_open_socket(ClientSocket, InStream, OutStream),
+    set_stream(InStream, close_on_abort(false)),
+    set_stream(OutStream, close_on_abort(false)),
+    set_prolog_IO(InStream, OutStream, OutStream),
+    set_stream(InStream, tty(true)),
+    set_prolog_flag(tty_control, false),
+    current_prolog_flag(encoding, Enc),
+    set_stream(user_input, encoding(Enc)),
+    set_stream(user_output, encoding(Enc)),
+    set_stream(user_error, encoding(Enc)),
+    set_stream(user_input, newline(detect)),
+    set_stream(user_output, newline(dos)),
+    set_stream(user_error, newline(dos)),
+    set_prolog_flag(toplevel_prompt, '?- ').
 
 :- det(swipl_debug_adapter_debugee/4).
 swipl_debug_adapter_debugee(ModulePath, GoalString, ServerThreadId, Handle) :-
