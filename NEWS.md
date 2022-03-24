@@ -1,3 +1,30 @@
+# What's new in SWI-Prolog Debug Adapter version 0.7.1
+
+The following changes were introduced since version 0.7.0 of the
+`debug_adapter` package:
+
+## New extensible interface for choosing DAP clients from the top-level
+
+When using SWI-Prolog through the regular built-in top-level, users
+can start a DAP session to interactively debug top-level queries by
+simply loading `library(swipl_debug_adapter)`.
+
+The `swipl_debug_adapter` installs a tracer hook that causes
+SWI-Prolog to start a DAP-supporting IDE (client) in an external
+process and connect it to the running top-level thread through a local
+TCP connection to form a DAP interactive debugging session. The DAP
+client is started at the first occasion in which the tracer is
+hit. This is a similar feature to `gtrace/0` as provided by
+SWI-Prolog's built-in graphical debugger, except that loading
+`library(swipl_debug_adapter)` will not cause Prolog to go into trace
+mode, instead one can explicitly call `trace/0` to start tracing the
+next goal, or `trap/0` to start tracing only when an exception is
+thrown, and so on.
+
+For more details and for information about configuring how
+`swipl_debug_adapter` starts the user's IDE, see the documentation for
+`swipl_debug_adapter_client_command/4`.
+
 # What's new in SWI-Prolog Debug Adapter version 0.7.0
 
 The following changes were introduced since version 0.6.3 of the
