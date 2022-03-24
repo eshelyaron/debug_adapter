@@ -101,11 +101,11 @@ da_server_handle(Out, _, _, action(Action), Seq0, Seq, State, State) :-
     !,
     da_server_perform_action(Out, Action, Seq0, Seq).
 da_server_handle(Out, Q, CB, stream(Message), Seq0, Seq, State0, State) :-
-    !,
     _{ type : "request",
        seq  : RequestSeq,
        command : Command0
      } :< Message,
+    !,
     atom_string(Command, Command0),
     (   get_dict(arguments, Message, Arguments)
     ->  true
@@ -118,6 +118,11 @@ da_server_handle(Out, Q, CB, stream(Message), Seq0, Seq, State0, State) :-
         dap_error(Out, Seq0, RequestSeq, Command, "Bad request"),
         Seq is Seq0 + 1
     ).
+da_server_handle(_Out, _Q, _CB, stream(Message), Seq, Seq, State, State) :-
+    _{ type : "response",
+       command : "runInTerminal"
+     } :< Message,
+    !.
 
 da_server_perform_action(Out, response(ReqSeq, Type, Body), Seq0, Seq) :-
     !,
