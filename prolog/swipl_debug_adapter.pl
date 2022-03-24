@@ -278,8 +278,7 @@ swipl_debug_adapter_terminal(Handle) :-
     thread_property(Self, id(Id)),
     da_sdk_event(Handle, thread, _{ reason   : "exited",
                                     threadId : Id }),
-    swipl_debug_adapter_translate_exit_code(Result, ExitCode),
-    da_sdk_event(Handle, exited, _{ exitCode : ExitCode }),
+    da_sdk_event(Handle, exited, _{ exitCode : 0 }),
     swipl_debug_adapter_cleanup(Ref).
 
 swipl_debug_adapter_top_level_setup(ServerSocket) :-
@@ -863,6 +862,12 @@ swipl_debug_adapter_initiate_client(TCPPort, PID) :-
 %  predicate are collected using findall/3, if mulitple solutions are found when the tracer is started,
 %  the user will be prompted to select a client to start.
 %
+%  Note: before version 0.7.0 of the `debug_adapter` package, a
+%  similar feature was provided that relied on a different multifle
+%  predicate, =user:debugger_connection_template/1=. This predicate
+%  supersedes that interface which is now obsolete.
+%
+%  Arguments:
 %  - TCPPort is an integer denoting the local TCP port which the DAP server is listening on and client should connect to.
 %  - Client should be unified with an arbitrary descriptive term that identifies the client.
 %  - Exec should be unified with a specification of the client executable.
