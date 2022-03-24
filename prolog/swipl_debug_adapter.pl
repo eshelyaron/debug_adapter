@@ -7,41 +7,50 @@
 
 :- use_module(library(debug_adapter/compat)).
 :- use_module(library(debug_adapter/sdk)).
+:- use_module(library(debug_adapter/server)).
 :- use_module(library(swipl_debug_adapter/stack)).
 :- use_module(library(swipl_debug_adapter/source)).
 :- use_module(library(swipl_debug_adapter/frame)).
 :- use_module(library(swipl_debug_adapter/clause)).
 
 
+%! swipl_debug_adapter_command_callback(+Command, +Arguments, +ReqSeq, +Handle, +State0, -State) is semidet.
+%
+%  True when the SWI-Prolog debug adapter server transitions from State0 to State while handling DAP
+%  command Command and arguments Arguments.
+%
+%  This predicate is passed as the `on_command` callback option of da_server/1.
 swipl_debug_adapter_command_callback(disconnect, _Arguments, ReqSeq, Handle, [], disconnected) :-
     !,
-    debug(dap(swipl), "Disconnecting", []),
     da_sdk_response(Handle, ReqSeq, disconnect),
     da_sdk_stop(Handle).
 swipl_debug_adapter_command_callback(initialize, Arguments, ReqSeq, Handle, [], initialized(Arguments)) :-
     !,
-    debug(dap(swipl), "Initializing", []),
     swipl_debug_adapter_capabilities(Capabilities),
     da_sdk_response(Handle, ReqSeq, initialize, Capabilities),
     da_sdk_event(Handle, initialized).
+swipl_debug_adapter_command_callback(initialize, _Arguments, ReqSeq, Handle, configured(Threads), configured(Threads)) :-
+    !,
+    swipl_debug_adapter_capabilities(Capabilities),
+    da_sdk_response(Handle, ReqSeq, initialize, Capabilities),
+    da_sdk_event(Handle, initialized).
+swipl_debug_adapter_command_callback(attach, _Arguments, ReqSeq, Handle, configured(Threads), configured(Threads)) :-
+    !,
+    da_sdk_response(Handle, ReqSeq, attach).
 swipl_debug_adapter_command_callback(launch, Arguments, ReqSeq, Handle, initialized(_), configured([Thread])) :-
     !,
-    debug(dap(swipl), "Launching ~w", [Arguments]),
     swipl_debug_adapter_launch_thread(Arguments, Handle, Thread),
     da_sdk_response(Handle, ReqSeq, launch).
 swipl_debug_adapter_command_callback(disconnect, _Arguments, ReqSeq, Handle, initialized(_), disconnected) :-
     !,
-    debug(dap(swipl), "Disconnecting", []),
     da_sdk_response(Handle, ReqSeq, disconnect),
     da_sdk_event(Handle, exited, _{ exitCode : 0 }),
     da_sdk_stop(Handle).
 swipl_debug_adapter_command_callback(configurationDone, _Arguments, ReqSeq, Handle, initialized(_), configured([])) :-
     !,
-    debug(dap(swipl), "Finalizing configuration", []),
     da_sdk_response(Handle, ReqSeq, configurationDone).
 swipl_debug_adapter_command_callback(launch, Arguments, ReqSeq, Handle, configured(Threads), configured([Thread|Threads])) :-
     !,
-    debug(dap(swipl), "Launching ~w", [Arguments]),
     swipl_debug_adapter_launch_thread(Arguments, Handle, Thread),
     da_sdk_response(Handle, ReqSeq, launch).
 swipl_debug_adapter_command_callback(configurationDone, _Arguments, ReqSeq, Handle, configured(Threads), configured(Threads)) :-
@@ -49,13 +58,11 @@ swipl_debug_adapter_command_callback(configurationDone, _Arguments, ReqSeq, Hand
     da_sdk_response(Handle, ReqSeq, configurationDone).
 swipl_debug_adapter_command_callback(threads, _Arguments, ReqSeq, Handle, configured(Threads), configured(Threads)) :-
     !,
-    debug(dap(swipl), "Handling threads request", []),
     maplist(number_string, Threads, Names),
     maplist([I,N,_{id:I,name:N}]>>true, Threads, Names, Ts),
     da_sdk_response(Handle, ReqSeq, threads, _{threads:Ts}).
 swipl_debug_adapter_command_callback(pause, Arguments, ReqSeq, Handle, configured(Threads0), configured(Threads)) :-
     !,
-    debug(dap(swipl), "Handling pause request", []),
     _{ threadId : ThreadId } :< Arguments,
     select(ThreadId, Threads0, Threads1),
     catch((thread_signal(ThreadId, (retractall(swipl_debug_adapter_last_action(_)),
@@ -79,7 +86,6 @@ swipl_debug_adapter_command_callback(source, Arguments, ReqSeq, Handle, State, S
     ).
 swipl_debug_adapter_command_callback(exceptionInfo, Arguments, ReqSeq, _Handle, configured(Threads0), configured(Threads)) :-
     !,
-    debug(dap(swipl), "Handling exceptionInfo request", []),
     _{ threadId : ThreadId } :< Arguments,
     select(ThreadId, Threads0, Threads1),
     catch((thread_send_message(ThreadId, exception_info(ReqSeq)), Threads = Threads0),
@@ -87,7 +93,6 @@ swipl_debug_adapter_command_callback(exceptionInfo, Arguments, ReqSeq, _Handle, 
           Threads = Threads1).
 swipl_debug_adapter_command_callback(stackTrace, Arguments, ReqSeq, _Handle, configured(Threads0), configured(Threads)) :-
     !,
-    debug(dap(swipl), "Handling stackTrace request", []),
     _{ threadId : ThreadId } :< Arguments,
     select(ThreadId, Threads0, Threads1),
     catch((thread_send_message(ThreadId, stack_trace(ReqSeq)), Threads = Threads0),
@@ -95,7 +100,6 @@ swipl_debug_adapter_command_callback(stackTrace, Arguments, ReqSeq, _Handle, con
           Threads = Threads1).
 swipl_debug_adapter_command_callback(evaluate, Arguments, ReqSeq, _Handle, configured(Threads0), configured(Threads)) :-
     !,
-    debug(dap(swipl), "Handling evaluate request", []),
     _{ frameId : FrameId, expression : Expression } :< Arguments,
     include({ReqSeq, FrameId}/[T]>>catch(thread_send_message(T, evaluate(ReqSeq, FrameId, Expression)),
                                          _,
@@ -104,7 +108,6 @@ swipl_debug_adapter_command_callback(evaluate, Arguments, ReqSeq, _Handle, confi
             Threads).
 swipl_debug_adapter_command_callback(scopes, Arguments, ReqSeq, _Handle, configured(Threads0), configured(Threads)) :-
     !,
-    debug(dap(swipl), "Handling scopes request", []),
     _{ frameId : FrameId } :< Arguments,
     include({ReqSeq, FrameId}/[T]>>catch(thread_send_message(T, scopes(ReqSeq, FrameId)),
                                          _,
@@ -113,7 +116,6 @@ swipl_debug_adapter_command_callback(scopes, Arguments, ReqSeq, _Handle, configu
             Threads).
 swipl_debug_adapter_command_callback(variables, Arguments, ReqSeq, _Handle, configured(Threads0), configured(Threads)) :-
     !,
-    debug(dap(swipl), "Handling variables request", []),
     _{ variablesReference : VariablesRef } :< Arguments,
     include({ReqSeq, VariablesRef}/[T]>>catch(thread_send_message(T, variables(ReqSeq, VariablesRef)),
                                          _,
@@ -122,7 +124,6 @@ swipl_debug_adapter_command_callback(variables, Arguments, ReqSeq, _Handle, conf
             Threads).
 swipl_debug_adapter_command_callback(stepInTargets, Arguments, ReqSeq, _Handle, configured(Threads0), configured(Threads)) :-
     !,
-    debug(dap(swipl), "Handling stepInTargets request", []),
     _{ frameId : FrameId } :< Arguments,
     include({ReqSeq, FrameId}/[T]>>catch(thread_send_message(T, step_in_targets(ReqSeq, FrameId)),
                                          _,
@@ -131,7 +132,6 @@ swipl_debug_adapter_command_callback(stepInTargets, Arguments, ReqSeq, _Handle, 
             Threads).
 swipl_debug_adapter_command_callback(stepIn, Arguments, ReqSeq, _Handle, configured(Threads0), configured(Threads)) :-
     !,
-    debug(dap(swipl), "Handling stepIn request", []),
     _{ threadId : ThreadId } :< Arguments,
     select(ThreadId, Threads0, Threads1),
     (   get_dict(targetId, Arguments, Target)
@@ -143,7 +143,6 @@ swipl_debug_adapter_command_callback(stepIn, Arguments, ReqSeq, _Handle, configu
           Threads = Threads1).
 swipl_debug_adapter_command_callback(next, Arguments, ReqSeq, _Handle, configured(Threads0), configured(Threads)) :-
     !,
-    debug(dap(swipl), "Handling next request", []),
     _{ threadId : ThreadId } :< Arguments,
     select(ThreadId, Threads0, Threads1),
     catch((thread_send_message(ThreadId, next(ReqSeq)), Threads = Threads0),
@@ -151,7 +150,6 @@ swipl_debug_adapter_command_callback(next, Arguments, ReqSeq, _Handle, configure
           Threads = Threads1).
 swipl_debug_adapter_command_callback(stepOut, Arguments, ReqSeq, _Handle, configured(Threads0), configured(Threads)) :-
     !,
-    debug(dap(swipl), "Handling stepOut request", []),
     _{ threadId : ThreadId } :< Arguments,
     select(ThreadId, Threads0, Threads1),
     catch((thread_send_message(ThreadId, step_out(ReqSeq)), Threads = Threads0),
@@ -159,7 +157,6 @@ swipl_debug_adapter_command_callback(stepOut, Arguments, ReqSeq, _Handle, config
           Threads = Threads1).
 swipl_debug_adapter_command_callback(restartFrame, Arguments, ReqSeq, _Handle, configured(Threads0), configured(Threads)) :-
     !,
-    debug(dap(swipl), "Handling stepOut request", []),
     _{ frameId : FrameId } :< Arguments,
     include({ReqSeq, FrameId}/[T]>>catch(thread_send_message(T, restart_frame(ReqSeq, FrameId)),
                                          _,
@@ -168,7 +165,6 @@ swipl_debug_adapter_command_callback(restartFrame, Arguments, ReqSeq, _Handle, c
             Threads).
 swipl_debug_adapter_command_callback(setFunctionBreakpoints, Arguments, ReqSeq, Handle, State, State) :-
     !,
-    debug(dap(swipl), "Handling setFunctionBreakpoints request", []),
     _{ breakpoints : ReqBreakpoints } :< Arguments,
     maplist(swipl_debug_adapter_translate_function_breakpoint, ReqBreakpoints, PIs),
     retractall(swipl_debug_adapter_function_breakpoint(_)),
@@ -185,7 +181,6 @@ swipl_debug_adapter_command_callback(setFunctionBreakpoints, Arguments, ReqSeq, 
     da_sdk_response(Handle, ReqSeq, setFunctionBreakpoints, _{breakpoints:ResBreakpoints}).
 swipl_debug_adapter_command_callback(setExceptionBreakpoints, Arguments, ReqSeq, Handle, State, State) :-
     !,
-    debug(dap(swipl), "Handling setExceptionBreakpoints request", []),
     _{ filters : Filters } :< Arguments,
     (   Filters == []
     ->  retractall(swipl_debug_adapter_trapping),
@@ -196,7 +191,6 @@ swipl_debug_adapter_command_callback(setExceptionBreakpoints, Arguments, ReqSeq,
     ).
 swipl_debug_adapter_command_callback(setBreakpoints, Arguments, ReqSeq, Handle, State, State) :-
     !,
-    debug(dap(swipl), "Handling setBreakpoints request", []),
     _{ source      : DAPSource,
        breakpoints : DAPReqBreakpoints
      } :< Arguments,
@@ -207,13 +201,11 @@ swipl_debug_adapter_command_callback(setBreakpoints, Arguments, ReqSeq, Handle, 
     da_sdk_response(Handle, ReqSeq, setBreakpoints, _{breakpoints:DAPBreakpoints}).
 swipl_debug_adapter_command_callback(disconnect, _Arguments, ReqSeq, Handle, configured(Threads), disconnected) :-
     !,
-    debug(dap(swipl), "disconnecting", []),
     maplist([T]>>catch(thread_send_message(T, disconnect), _, true), Threads),
     da_sdk_response(Handle, ReqSeq, disconnect),
     da_sdk_stop(Handle).
 swipl_debug_adapter_command_callback(continue, Arguments, ReqSeq, Handle, configured(Threads), configured(Threads)) :-
     !,
-    debug(dap(swipl), "Handling continue request", []),
     _{ threadId : ThreadId } :< Arguments,
     select(ThreadId, Threads0, Threads1),
     catch((thread_send_message(ThreadId, continue), Threads = Threads0),
@@ -298,9 +290,9 @@ swipl_debug_adapter_translate_source_breakpoint(P, D, source_breakpoint(L, C, Co
 
 
 swipl_debug_adapter_translate_variable(variable(Name, Value, VariablesRef),
-				       _{ name               : Name,
-					  variablesReference : VariablesRef,
-					  value              : Value }).
+                                       _{ name               : Name,
+                                          variablesReference : VariablesRef,
+                                          value              : Value }).
 
 
 swipl_debug_adapter_translate_result_breakpoint(breakpoint(Id, Verified, Message, SourceSpan),
@@ -353,8 +345,7 @@ swipl_debug_adapter_translate_function_breakpoint(D, user:P) :-
    swipl_debug_adapter_function_breakpoint/1.
 
 
-:- det(swipl_debug_adapter_trace/3).
-swipl_debug_adapter_trace(QGoal, VarNames, Handle) :-
+swipl_debug_adapter_setup(Handle, Ref) :-
     asserta(swipl_debug_adapter_handle(Handle), Ref),
     asserta(swipl_debug_adapter_last_action(entry)),
     asserta((user:thread_message_hook(Term, Kind, Lines) :-
@@ -366,36 +357,44 @@ swipl_debug_adapter_trace(QGoal, VarNames, Handle) :-
     prolog_listen(break, swipl_debug_adapter_handle_break_event, [as(last), name(swipl_debug_adapter)]),
     set_prolog_flag(gui_tracer, true),
     visible([+call, +exit, +fail, +redo, +unify, +cut_call, +cut_exit, +exception]),
-    prolog_skip_level(_, very_deep),
+    prolog_skip_level(_, very_deep).
+
+
+:- det(swipl_debug_adapter_trace/3).
+swipl_debug_adapter_trace(QGoal, VarNames, Handle) :-
+    swipl_debug_adapter_setup(Handle, Ref),
     swipl_debug_adapter_goal_reified_result(QGoal, VarNames, Result),
-    prolog_listen(break, swipl_debug_adapter_mock_break_event, [as(last), name(swipl_debug_adapter)]),
-    erase(Ref),
     thread_self(Self),
     thread_property(Self, id(Id)),
     da_sdk_event(Handle, thread, _{ reason   : "exited",
                                     threadId : Id }),
     swipl_debug_adapter_translate_exit_code(Result, ExitCode),
-    da_sdk_event(Handle, exited, _{ exitCode : ExitCode }).
+    da_sdk_event(Handle, exited, _{ exitCode : ExitCode }),
+    swipl_debug_adapter_cleanup(Ref).
+
+
+swipl_debug_adapter_cleanup(Ref) :-
+    prolog_listen(break, swipl_debug_adapter_mock_break_event, [as(last), name(swipl_debug_adapter)]),
+    erase(Ref).
 
 
 swipl_debug_adapter_goal_reified_result(Goal, VarNames, Result) :-
     catch((   trace, Goal, notrace
-          ->  print_message(trace, da_tracer_top_level_query(true(VarNames))),
+          ->  print_message(trace, swipl_debug_adapter_top_level_query(true(VarNames))),
               Result = true
           ;   notrace,
-              print_message(trace, da_tracer_top_level_query(false)),
+              print_message(trace, swipl_debug_adapter_top_level_query(false)),
               Result = false
           ),
           Catcher,
           (notrace,
-           print_message(trace, da_tracer_top_level_query(exception(Catcher))),
+           print_message(trace, swipl_debug_adapter_top_level_query(exception(Catcher))),
            Result = exception(Catcher)
           )
          ).
 
 
 swipl_debug_adapter_handle_break_event(gc, ClauseRef, PC) :-
-    debug(dap(swipl), "Handling breakpoint event", []),
     swipl_debug_adapter_handle(Handle),
     !,
     (   retract(swipl_debug_adapter_source_breakpoint(BP, ClauseRef, PC, _, _, _, _))
@@ -416,7 +415,6 @@ swipl_debug_adapter_exception_hook(_In, _Out, _Frame, _Catcher) :-
     trace.
 
 
-:- det(swipl_debug_adapter_message_hook/3).
 swipl_debug_adapter_message_hook(_   , silent, _) :- !.
 swipl_debug_adapter_message_hook(Term, _     , _) :-
     swipl_debug_adapter_handle(Handle),
@@ -433,8 +431,8 @@ prolog:open_source_hook(Path, Stream, _Options) :-
         ->  Reason = "new"
         ;   Reason = "changed"
         ),
-	file_base_name(Path, BaseName),
-	da_sdk_event(Handle, loadedSource, _{ reason : Reason,
+        file_base_name(Path, BaseName),
+        da_sdk_event(Handle, loadedSource, _{ reason : Reason,
                                               source : _{ name : BaseName,
                                                           path : Path }})
     ;   true
@@ -444,23 +442,39 @@ prolog:open_source_hook(Path, Stream, _Options) :-
 
 :- multifile prolog:message//1.
 
-prolog:message(da_tracer_top_level_query(true([]))) -->
+prolog:message(swipl_debug_adapter_top_level_query(true([]))) -->
     !,
     [ 'true.'-[] ].
-prolog:message(da_tracer_top_level_query(true(VarNames))) -->
+prolog:message(swipl_debug_adapter_top_level_query(true(VarNames))) -->
     !,
     [ '~p'-[VarNames], nl ],
     [ 'true.'-[] ].
-prolog:message(da_tracer_top_level_query(false)) -->
+prolog:message(swipl_debug_adapter_top_level_query(false)) -->
     !,
     [ 'false.'-[] ].
-prolog:message(da_tracer_top_level_query(exception(E))) -->
+prolog:message(swipl_debug_adapter_top_level_query(exception(E))) -->
     !,
     [ 'unhandled exception: ~w.'-[E] ].
 prolog:message(log_message(BP, Map, String0)) -->
     { interpolate_string(String0, String, Map, []) },
     !,
     [ 'Log point ~w: ~w'-[BP, String] ].
+prolog:message(swipl_debug_adapter_client_choice(Choice)) -->
+    !,
+    [ 'Starting DAP client ~w'-[Choice] ].
+prolog:message(swipl_debug_adapter_client_choices(Choices)) -->
+    !,
+    [ 'Available DAP clients:'-[], nl ],
+    swipl_debug_adapter_client_choices_message(Choices, 1).
+swipl_debug_adapter_client_choices_message([], _) -->
+    !,
+    [ 'Choice: '-[] ].
+swipl_debug_adapter_client_choices_message([c(C, _, _)|T], N) -->
+    !,
+    [ '~w: ~w'-[N, C], nl ],
+    { S is N + 1 },
+    swipl_debug_adapter_client_choices_message(T, S).
+
 
 
 user:prolog_trace_interception(Port, Frame, Choice, Action) :-
@@ -474,6 +488,16 @@ swipl_debug_adapter_trace_interception(Port, Frame, Choice, Action) :-
     swipl_debug_adapter_last_action(LastAction),
     !,
     swipl_debug_adapter_stopped(Port, Frame, Choice, LastAction, Handle, Action).
+swipl_debug_adapter_trace_interception(Port, Frame, Choice, Action) :-
+    swipl_debug_adapter_initiate_session(In, Out),
+    !,
+    thread_self(Self),
+    thread_property(Self, id(Id)),
+    message_queue_create(Handle),
+    thread_create(da_server([initial_state(configured([Id])), in(In), out(Out), on_command(swipl_debug_adapter_command_callback), handle(Handle)]), _ServerThreadId),
+    swipl_debug_adapter_setup(Handle, _),
+    da_sdk_event(Handle, stopped, _{reason:"entry", threadId:Id}),
+    swipl_debug_adapter_handle_messages(Port, Frame, Choice, Handle, Action).
 
 
 :- det(swipl_debug_adapter_stopped/6).
@@ -643,16 +667,16 @@ swipl_debug_adapter_translate_stack_frame(stack_frame(Id, InFrameLabel, PI, _Alt
     swipl_debug_adapter_translate_inframe_label(InFrameLabel, DAPLabel).
 
 swipl_debug_adapter_translate_scope(scope(Name, VariablesRef, SourceSpan),
-				    _{ name               : Name,
-				       variablesReference : VariablesRef,
-				       expensive          : false,
-				       source             : DAPSource,
-				       line               : SL,
-				       column             : SC,
-				       endLine            : EL,
-				       endColumn          : EC
-				     }
-				   ) :-
+                                    _{ name               : Name,
+                                       variablesReference : VariablesRef,
+                                       expensive          : false,
+                                       source             : DAPSource,
+                                       line               : SL,
+                                       column             : SC,
+                                       endLine            : EL,
+                                       endColumn          : EC
+                                     }
+                                   ) :-
     swipl_debug_adapter_translate_source_span(SourceSpan, DAPSource, SL, SC, EL, EC).
 
 swipl_debug_adapter_translate_inframe_label(port(Port), DAPLabel) :-
@@ -716,11 +740,11 @@ swipl_debug_adapter_breakpoint_path(BP, Path) :-
 
 
 swipl_debug_adapter_breakpoints_set([   ], _) --> [].
-swipl_debug_adapter_breakpoints_set([H|T], P) --> swipl_debug_swipl_breakpoint_set(H, P), swipl_debug_adapter_breakpoints_set(T, P).
+swipl_debug_adapter_breakpoints_set([H|T], P) --> swipl_debug_adapter_breakpoint_set(H, P), swipl_debug_adapter_breakpoints_set(T, P).
 
 
-:- det(swipl_debug_swipl_breakpoint_set/4).
-swipl_debug_swipl_breakpoint_set(source_breakpoint(L0, C0, Cond, Hit, Log), path(P)) -->
+:- det(swipl_debug_adapter_breakpoint_set/4).
+swipl_debug_adapter_breakpoint_set(source_breakpoint(L0, C0, Cond, Hit, Log), path(P)) -->
     {   prolog_breakpoints:set_breakpoint(P, L0, C0, BP)   },
     !,
     {   prolog_breakpoints:known_breakpoint(Clause, PC, _, BP),
@@ -730,4 +754,60 @@ swipl_debug_swipl_breakpoint_set(source_breakpoint(L0, C0, Cond, Hit, Log), path
         da_source_file_offsets_line_column_pairs(path(P), [A, Z], [SL-SC, EL-EC])
     },
     [   breakpoint(BP, true, null, span(path(P), SL, SC, EL, EC))   ].
-swipl_debug_swipl_breakpoint_set(_, _) --> [].
+swipl_debug_adapter_breakpoint_set(_, _) --> [].
+
+
+swipl_debug_adapter_initiate_session(InStream, OutStream) :-
+    tcp_socket(ServerSocket),
+    tcp_setopt(ServerSocket, reuseaddr),
+    tcp_bind(ServerSocket, TCPPort),
+    tcp_listen(ServerSocket, 5),
+    (   swipl_debug_adapter_initiate_client(TCPPort, _)
+    ->  tcp_accept(ServerSocket, ClientSocket, Peer),
+        (   Peer = ip(127,0,_,_)
+        ->  tcp_open_socket(ClientSocket, InStream, OutStream)
+        ;   tcp_close_socket(ServerSocket), tcp_close_socket(ClientSocket), !, fail
+        )
+    ;   tcp_close_socket(ServerSocket), !, fail
+    ).
+
+
+swipl_debug_adapter_initiate_client(TCPPort, PID) :-
+    findall(c(Client, Exec, Args),
+            swipl_debug_adapter_client_command(TCPPort, Client, Exec, Args),
+            [H|T]),
+    (   T == []
+    ->  H =  c(C, E, A)
+    ;   print_message(informational, swipl_debug_adapter_client_choices([H|T])),
+        get_char(N),
+        atom_number(N, M),
+        nth1(M, [H|T], c(C, E, A))
+    ),
+    print_message(informational, swipl_debug_adapter_client_choice(C)),
+    process_create(E, A, [detached(true), process(PID)]).
+
+
+:- multifile swipl_debug_adapter_client_command/4.
+:- dynamic swipl_debug_adapter_client_command/4.
+:- public swipl_debug_adapter_client_command/4.
+
+%! swipl_debug_adapter_client_command(+TCPPort, -Client, -Exec, -Args) is multi.
+%
+%  Multifile predicate, specifies an external command used for starting an interactive DAP client.
+%
+%  By default, `swipl_debug_adapter` currently defines a single DAP client, which unifies
+%  Client with `emacs('dap-mode')`, Exec with `path(emacs)` and Args with `['--eval', Elisp]`
+%  where _ELisp_ is a string denoting an Emacs Lisp form that Emacs executes
+%  to start the DAP session.
+%
+%  Users can specify different DAP clients by defining other clauses for this predicate. The solutions of this
+%  predicate are collected using findall/3, if mulitple solutions are found when the tracer is started,
+%  the user will be prompted to select a client to start.
+%
+%  - TCPPort is an integer denoting the local TCP port which the DAP server is listening on and client should connect to.
+%  - Client should be unified with an arbitrary descriptive term that identifies the client.
+%  - Exec should be unified with a specification of the client executable.
+%  - Args should be unified with a list of command line arguments that will be passed to client executable.
+
+swipl_debug_adapter_client_command(TCPPort, emacs('dap-mode'), path(emacs), ['--eval', SExp]) :-
+    format(string(SExp), '(dap-debug (list :type \"swi-prolog-tcp\" :debugServer ~w))', [TCPPort]).
