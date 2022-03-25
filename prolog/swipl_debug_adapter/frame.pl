@@ -204,7 +204,7 @@ da_frame_clause(Frame, ClauseRef) :-
             ->  true
             ;   functor(UGoal, Functor, Arity),
                 functor(UGoalTemplate, Functor, Arity),
-                clause(Module:UGoalTemplate, _Body, ClauseRef)
+                clause(Module:UGoalTemplate, _Body, ClauseRef), !
             )
         ;   ClauseRef = null
         )
@@ -298,6 +298,7 @@ da_active_frame_scopes(FrameId, Port, [ scope(Name, ArgumentsRef, ArgumentsSpan)
 
 :- use_module(library(clpfd)).
 
+:- det(da_frame_variables_reference_type/3).
 da_frame_variables_reference_type(FrameId, VariablesRef, Type) :-
     da_variables_reference_frame_type_id(VariablesRef, FrameId, TypeId),
     da_scope_type_id(Type, TypeId).
@@ -335,6 +336,7 @@ da_tracer_cached_compound_arguments(Arguments, Ref) :-
     ),
     asserta(da_variables_compound_arguments(Arguments, Ref)).
 
+:- det(indexed_arguments/3).
 indexed_arguments(_, [], []) :- !.
 indexed_arguments(I0, [H0|T0], [variable(Name, H, ChildrenReference)|T]) :-
     indexed_argument_name(I0, Name),
@@ -359,10 +361,12 @@ da_term_factorized(Compound, Ref, Name) :-
 da_term_factorized(Term0, 0, Term) :-
     term_string(Term0, Term).
 
+:- det(da_frame_variables/4).
 da_frame_variables(Frame, Type, VarNames, Variables) :-
     da_frame_goal_arity(Frame, Arity),
     da_frame_arity_variables(Frame, Arity, Type, VarNames, Variables).
 
+:- det(da_frame_goal_arity/2).
 da_frame_goal_arity(FrameId, Arity) :-
     prolog_frame_attribute(FrameId, predicate_indicator, PI),
     qualified(PI, _, _Functor/Arity).
@@ -379,6 +383,7 @@ da_frame_arity_variables(Frame, Arity, locals, VarNames, Variables) :-
     succ(Arity, I),
     da_frame_locals(Frame, I, VarNames, Variables).
 
+:- det(da_frame_arguments/5).
 da_frame_arguments(Frame, I, Arity, VarNames, Variables) :-
     (   I =< Arity
     ->  arg(I, VarNames, Name0),
@@ -445,11 +450,14 @@ da_frame_unify_variables( FrameId,  ClauseVarNames, [VarName=Value|T]) :- !,
 da_frame_variables_mapping(FrameId, Map) :-
     da_frame_clause(FrameId, ClauseRef),
     da_clause_variable_names(ClauseRef, ClauseVarNames),
-    findall(Name=Value,
-            (   arg(I, ClauseVarNames, Name),
-                prolog_frame_attribute(FrameId, argument(I), Value)
-            ),
-            Map).
+    (   ClauseVarNames == varnames
+    ->  Map = []
+    ;   findall(Name=Value,
+                (   arg(I, ClauseVarNames, Name),
+                    prolog_frame_attribute(FrameId, argument(I), Value)
+                ),
+                Map)
+    ).
 
 
 da_frame_step_in_targets(FrameId, FrameId, Choice, [step_in_target(0, null)|Targets]) :-
