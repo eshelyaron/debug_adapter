@@ -610,7 +610,10 @@ swipl_debug_adapter_handle_message(exception_info(ReqSeq), Port, Frame, Choice, 
 swipl_debug_adapter_handle_message(evaluate(ReqSeq, FrameId, SourceTerm), Port, Frame, Choice, Handle, Action) :-
     !,
     da_frame_evaluate(FrameId, SourceTerm, Result, Bindings),
-    format(string(Res), "~w~n~w.", [Bindings, Result]),
+    prolog:translate_bindings(Bindings, TraslatedBindings, _, _, _),
+    phrase('$messages':bindings(TraslatedBindings, []), Lines),
+    print_message_lines(string(Res0), '', Lines),
+    format(string(Res), "~w~w.", [Res0, Result]),
     da_sdk_response(Handle, ReqSeq, evaluate, _{result:Res, variablesReference:0}),
     swipl_debug_adapter_handle_messages(Port, Frame, Choice, Handle, Action).
 swipl_debug_adapter_handle_message(step_in_targets(ReqSeq, FrameId), Port, Frame, Choice, Handle, Action) :-
@@ -670,13 +673,24 @@ swipl_debug_adapter_completion_targets(atom(Prefix), _, Targets) :-
                type : Type },
             swipl_debug_adapter_atom_completion(Prefix, Label, Text, Type),
             Targets).
-
 swipl_debug_adapter_completion_targets(var(Prefix), FrameId, Targets) :-
     da_frame_variables_mapping(FrameId, Mapping),
     findall(_{ label: Name,
                text : Name,
                type : variable },
             (member(Name=_, Mapping), sub_atom(Name, 0, _, _, Prefix)),
+            Targets, Tail),
+    findall(_{ label: Label,
+               text : Text,
+               type : Type },
+            (swipl_debug_adapter_atom_completion(Prefix, Label, Text0, Type),
+             format(string(Text), "'~w'", [Text0])),
+            Tail).
+swipl_debug_adapter_completion_targets(symbol(Prefix), _, Targets) :-
+    findall(_{ label: Label,
+               text : Text,
+               type : Type },
+            swipl_debug_adapter_symbol_completion(Prefix, Label, Text, Type),
             Targets).
 
 swipl_debug_adapter_atom_completion(Prefix, Label, Text, predicate) :-
@@ -694,10 +708,40 @@ swipl_debug_adapter_atom_completion(Prefix, Label, Text, module) :-
     sub_atom(M, 0, _, _, Prefix),
     format(string(Label), "~w", [M]),
     format(string(Text), "~w:", [M]).
+swipl_debug_adapter_atom_completion(Prefix, Label, Text, Type) :-
+    current_op(_, Associativity, Op),
+    sub_atom(Op, 0, _, _, Prefix),
+    swipl_debug_adapter_operator_completion(Associativity, Op, Label, Text, Type).
 swipl_debug_adapter_atom_completion(Prefix, Atom, Atom, atom) :-
     current_atom(Atom),
     sub_atom(Atom, 0, _, _, Prefix).
 
+
+swipl_debug_adapter_symbol_completion(Prefix, Label, Text, Type) :-
+    current_op(_, Associativity, Op),
+    sub_atom(Op, 0, _, _, Prefix),
+    swipl_debug_adapter_operator_completion(Associativity, Op, Label, Text, Type).
+
+
+swipl_debug_adapter_operator_completion(xf , Op, Label, Op, 'suffix operator') :-
+    format(string(Label), "X ~w", [Op]).
+swipl_debug_adapter_operator_completion(yf , Op, Label, Op, 'suffix operator') :-
+    format(string(Label), "Y ~w", [Op]).
+swipl_debug_adapter_operator_completion(xfx, Op, Label, Tx, 'infix operator' ) :-
+    format(string(Label), "X ~w X", [Op]),
+    format(string(Tx), "~w ", [Op]).
+swipl_debug_adapter_operator_completion(xfy, Op, Label, Tx, 'infix operator' ) :-
+    format(string(Label), "X ~w Y", [Op]),
+    format(string(Tx), "~w ", [Op]).
+swipl_debug_adapter_operator_completion(yfx, Op, Label, Tx, 'infix operator' ) :-
+    format(string(Label), "Y ~w X", [Op]),
+    format(string(Tx), "~w ", [Op]).
+swipl_debug_adapter_operator_completion(fy , Op, Label, Tx, 'prefix operator') :-
+    format(string(Label), "~w Y", [Op]),
+    format(string(Tx), "~w ", [Op]).
+swipl_debug_adapter_operator_completion(fx , Op, Label, Tx, 'prefix operator') :-
+    format(string(Label), "~w X", [Op]),
+    format(string(Tx), "~w ", [Op]).
 
 token_prefix_at(T, N) -->
     [C],
@@ -713,6 +757,10 @@ code_token_prefix_at(C, T, N) -->
     {   code_type(C, prolog_var_start)   },
     !,
     continuation_at(var, [C], T, N).
+code_token_prefix_at(C, T, N) -->
+    {   code_type(C, prolog_symbol)   },
+    !,
+    symbol_at([C], T, N).
 code_token_prefix_at(_, T, N) -->
     token_prefix_at(T, N).
 
@@ -734,6 +782,23 @@ code_continuation_at(Kind, C, Codes, T, N) -->
     !,
     continuation_at(Kind, [C|Codes], T, N).
 code_continuation_at(_Kind, C, _Codes, T, N) -->
+    code_token_prefix_at(C, T, N).
+
+
+symbol_at(Codes0, symbol(Prefix), 0) -->
+    !,
+    {   reverse(Codes0, Codes), atom_codes(Prefix, Codes)   }.
+symbol_at(Codes, T, N) -->
+    [C],
+    {   P is N - 1   },
+    code_symbol_at(C, Codes, T, P).
+
+
+code_symbol_at(C, Codes, T, N) -->
+    {   code_type(C, prolog_symbol)   },
+    !,
+    symbol_at([C|Codes], T, N).
+code_symbol_at(C, _Codes, T, N) -->
     code_token_prefix_at(C, T, N).
 
 
