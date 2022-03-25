@@ -106,6 +106,14 @@ swipl_debug_adapter_command_callback(evaluate, Arguments, ReqSeq, _Handle, confi
                                          fail),
             Threads0,
             Threads).
+swipl_debug_adapter_command_callback(completions, Arguments, ReqSeq, _Handle, configured(Threads0), configured(Threads)) :-
+    !,
+    _{ frameId : FrameId, text : Text, column: Column } :< Arguments,
+    include({ReqSeq, FrameId}/[T]>>catch(thread_send_message(T, completions(ReqSeq, FrameId, Text, Column)),
+                                         _,
+                                         fail),
+            Threads0,
+            Threads).
 swipl_debug_adapter_command_callback(scopes, Arguments, ReqSeq, _Handle, configured(Threads0), configured(Threads)) :-
     !,
     _{ frameId : FrameId } :< Arguments,
@@ -218,6 +226,7 @@ swipl_debug_adapter_capabilities(_{ supportsConfigurationDoneRequest  : true,
                                     supportsExceptionInfoRequest      : true,
                                     supportsRestartFrame              : true,
                                     supportsEvaluateForHovers         : true,
+                                    supportsCompletionsRequest        : true,
                                     supportsFunctionBreakpoints       : true,
                                     supportsConditionalBreakpoints    : true,
                                     supportsHitConditionalBreakpoints : true,
@@ -647,6 +656,86 @@ swipl_debug_adapter_handle_message(restart_frame(ReqSeq, FrameId), _Port, _Frame
     da_sdk_response(Handle, ReqSeq, restartFrame),
     retractall(swipl_debug_adapter_last_action(_)),
     asserta(swipl_debug_adapter_last_action(restart_frame)).
+swipl_debug_adapter_handle_message(completions(ReqSeq, FrameId, Text, Column), Port, Frame, Choice, Handle, Action) :-
+    !,
+    string_codes(Text, Codes),
+    phrase(token_prefix_at(TokenPrefix, Column), Codes, _),
+    swipl_debug_adapter_completion_targets(TokenPrefix, FrameId, Targets),
+    da_sdk_response(Handle, ReqSeq, completions, _{targets:Targets}),
+    swipl_debug_adapter_handle_messages(Port, Frame, Choice, Handle, Action).
+
+swipl_debug_adapter_completion_targets(atom(Prefix), _, Targets) :-
+    findall(_{ label: Label,
+               text : Text,
+               type : Type },
+            swipl_debug_adapter_atom_completion(Prefix, Label, Text, Type),
+            Targets).
+
+swipl_debug_adapter_completion_targets(var(Prefix), FrameId, Targets) :-
+    da_frame_variables_mapping(FrameId, Mapping),
+    findall(_{ label: Name,
+               text : Name,
+               type : variable },
+            (member(Name=_, Mapping), sub_atom(Name, 0, _, _, Prefix)),
+            Targets).
+
+swipl_debug_adapter_atom_completion(Prefix, Label, Text, predicate) :-
+    current_predicate(P/I),
+    sub_atom(P, 0, _, _, Prefix),
+    format(string(Label), "~w/~w", [P,I]),
+    format(string(Text), "~w(", [P]).
+swipl_debug_adapter_atom_completion(Prefix, Label, Text, predicate) :-
+    current_predicate(M:P/I),
+    sub_atom(P, 0, _, _, Prefix),
+    format(string(Label), "~w:~w/~w", [M, P, I]),
+    format(string(Text), "~w:~w(", [M, P]).
+swipl_debug_adapter_atom_completion(Prefix, Label, Text, module) :-
+    current_module(M),
+    sub_atom(M, 0, _, _, Prefix),
+    format(string(Label), "~w", [M]),
+    format(string(Text), "~w:", [M]).
+swipl_debug_adapter_atom_completion(Prefix, Atom, Atom, atom) :-
+    current_atom(Atom),
+    sub_atom(Atom, 0, _, _, Prefix).
+
+
+token_prefix_at(T, N) -->
+    [C],
+    {   P is N - 1   },
+    code_token_prefix_at(C, T, P).
+
+
+code_token_prefix_at(C, T, N) -->
+    {   code_type(C, prolog_atom_start)   },
+    !,
+    continuation_at(atom, [C], T, N).
+code_token_prefix_at(C, T, N) -->
+    {   code_type(C, prolog_var_start)   },
+    !,
+    continuation_at(var, [C], T, N).
+code_token_prefix_at(_, T, N) -->
+    token_prefix_at(T, N).
+
+
+continuation_at(atom, Codes0, atom(Prefix), 0) -->
+    !,
+    {   reverse(Codes0, Codes), atom_codes(Prefix, Codes)   }.
+continuation_at(var, Codes0, var(Prefix), 0) -->
+    !,
+    {   reverse(Codes0, Codes), atom_codes(Prefix, Codes)   }.
+continuation_at(Kind, Codes, T, N) -->
+    [C],
+    {   P is N - 1   },
+    code_continuation_at(Kind, C, Codes, T, P).
+
+
+code_continuation_at(Kind, C, Codes, T, N) -->
+    {   code_type(C, prolog_identifier_continue)   },
+    !,
+    continuation_at(Kind, [C|Codes], T, N).
+code_continuation_at(_Kind, C, _Codes, T, N) -->
+    code_token_prefix_at(C, T, N).
+
 
 
 swipl_debug_adapter_stopped_reason(exception(E), _, _            , _{reason:exception, description:D}) :- !, term_string(E, D).

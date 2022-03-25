@@ -1,0 +1,21 @@
+request :- initialize.
+event   :- initialized.
+request :- configurationDone.
+request :- launch   :   _{ cwd : WD, module : "./target/foo.pl", goal : "foo(baz, bar)" }.
+event   :- stopped :<   _{ threadId : Id, reason : "entry" }.
+request :- threads
+           ->
+           true:        _{ threads: [_{id: Id, name: _}] } ;
+           stackTrace : _{ threadId : Id }
+           *->
+           true       : _{ stackFrames: [ActiveFrame|_] }.
+        ?- _{ id : FrameId } :< ActiveFrame.
+request :- completions: _{ frameId : FrameId, text: "Ba", column: 2 }
+           ->
+           true  : _{ targets: Targets}.
+        ?- memberchk(_{ label: "Bar", text: "Bar", type: "variable" }, Targets).
+        ?- memberchk(_{ label: "Baz", text: "Baz", type: "variable" }, Targets).
+request :- continue : _{ threadId : Id }.
+event   :- output :< _{ output   : "true.\n" } ;
+           exited :< _{ exitCode : 0         }.
+request :- disconnect.

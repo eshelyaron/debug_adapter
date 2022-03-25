@@ -63,7 +63,7 @@ information about the current runtime.
 |---------------------------|----------------------------------------------------------------------|--------|
 | Attach                    | attach to a debuggee that is already running                         | ✅     |
 | BreakpointLocations       | obtain possible locations for source breakpoints in a given range    |        |
-| Completions               | obtain possible completions for a given caret position and text      |        |
+| Completions               | obtain possible completions for a given caret position and text      | ✅     |
 | ConfigurationDone         | finish initialization of the debug adapter                           | ✅     |
 | Continue                  | resume execution of all threads                                      | ✅     |
 | DataBreakpointInfo        | obtain information on a possible data breakpoint that could be set   |        |
