@@ -16,7 +16,7 @@ request :- threads
 request :- evaluate   : _{ expression : "Y is X + 3", frameId : FrameId0 }
            *->
            true       : _{ result : Result0 }.
-        ?- sub_string(Result0, _, _, _, "Y=4"), !.
+        ?- sub_string(Result0, _, _, _, "Y = 4"), !.
 request :- continue : _{ threadId : Id }.
 event   :- output :< _{ output   : "true.\n" } ;
            exited :< _{ exitCode : 0         }.
