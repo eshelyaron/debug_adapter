@@ -30,7 +30,7 @@
 run_script(Path, Options) :-
     swipl_executable(Swipl),
     option(server_executable(Exec), Options, Swipl),
-    option(server_cli_args(Args), Options, ['-g', '[library(debug_adapter/main)]', '-t', 'halt', '--', '-T', '10']),
+    option(server_cli_args(Args), Options, ['-g', '[library(debug_adapter/main)]', '-t', 'halt', '--', '-T', '16']),
     option(bindings(Vars), Options, []),
     setup_call_cleanup(open(Path, read, In),
                        setup_call_cleanup(session_start([Exec|Args], Session),
