@@ -421,8 +421,8 @@ swipl_debug_adapter_setup(Handle, Ref) :-
     asserta((user:prolog_exception_hook(Ex, Out, Frame, Catcher) :-
                  swipl_debug_adapter_exception_hook(Ex, Out, Frame, Catcher),
                  fail)),
-    prolog_listen(break, swipl_debug_adapter_handle_break_event, [as(last), name(swipl_debug_adapter)]),
-    set_prolog_flag(gui_tracer, true),
+    prolog_listen(break, swipl_debug_adapter:swipl_debug_adapter_handle_break_event, [as(last), name(swipl_debug_adapter)]),
+    create_prolog_flag(gui_tracer, true, [type(boolean)]),
     visible([+call, +exit, +fail, +redo, +unify, +cut_call, +cut_exit, +exception]),
     prolog_skip_level(_, very_deep).
 
@@ -441,7 +441,9 @@ swipl_debug_adapter_trace(QGoal, VarNames, Handle) :-
 
 
 swipl_debug_adapter_cleanup(Ref) :-
-    prolog_listen(break, swipl_debug_adapter_mock_break_event, [as(last), name(swipl_debug_adapter)]),
+    prolog_listen(break,
+                  swipl_debug_adapter:swipl_debug_adapter_mock_break_event,
+                  [as(last), name(swipl_debug_adapter)]),
     erase(Ref).
 
 
@@ -475,13 +477,14 @@ swipl_debug_adapter_handle_break_event(gc, ClauseRef, PC) :-
 swipl_debug_adapter_mock_break_event(_, _, _) :- fail.
 
 
+:- public swipl_debug_adapter_exception_hook/4.
 swipl_debug_adapter_exception_hook(_In, _Out, _Frame, _Catcher) :-
     thread_self(Me),
     thread_property(Me, debug(true)),
     swipl_debug_adapter_trapping,
     trace.
 
-
+:- public swipl_debug_adapter_message_hook/3.
 swipl_debug_adapter_message_hook(_   , silent, _) :- !.
 swipl_debug_adapter_message_hook(Term, _     , _) :-
     swipl_debug_adapter_handle(Handle),
@@ -678,7 +681,7 @@ swipl_debug_adapter_completion_targets(var(Prefix), FrameId, Targets) :-
     findall(_{ label: Name,
                text : Name,
                type : variable },
-            (member(Name=_, Mapping), sub_atom(Name, 0, _, _, Prefix)),
+            (member(Name0=_, Mapping), atom_string(Name0, Name), sub_string(Name, 0, _, _, Prefix)),
             Targets, Tail),
     findall(_{ label: Label,
                text : Text,
@@ -700,26 +703,31 @@ swipl_debug_adapter_atom_completion(Prefix, Label, Text, predicate) :-
     format(string(Text), "~w(", [P]).
 swipl_debug_adapter_atom_completion(Prefix, Label, Text, predicate) :-
     current_predicate(M:P/I),
-    sub_atom(P, 0, _, _, Prefix),
+    atom_string(P, Name),
+    sub_string(Name, 0, _, _, Prefix),
     format(string(Label), "~w:~w/~w", [M, P, I]),
     format(string(Text), "~w:~w(", [M, P]).
 swipl_debug_adapter_atom_completion(Prefix, Label, Text, module) :-
     current_module(M),
-    sub_atom(M, 0, _, _, Prefix),
+    atom_string(M, Name),
+    sub_string(Name, 0, _, _, Prefix),
     format(string(Label), "~w", [M]),
     format(string(Text), "~w:", [M]).
 swipl_debug_adapter_atom_completion(Prefix, Label, Text, Type) :-
     current_op(_, Associativity, Op),
-    sub_atom(Op, 0, _, _, Prefix),
+    atom_string(Op, Name),
+    sub_string(Name, 0, _, _, Prefix),
     swipl_debug_adapter_operator_completion(Associativity, Op, Label, Text, Type).
 swipl_debug_adapter_atom_completion(Prefix, Atom, Atom, atom) :-
     current_atom(Atom),
-    sub_atom(Atom, 0, _, _, Prefix).
+    atom_string(Atom, Name),
+    sub_string(Name, 0, _, _, Prefix).
 
 
 swipl_debug_adapter_symbol_completion(Prefix, Label, Text, Type) :-
     current_op(_, Associativity, Op),
-    sub_atom(Op, 0, _, _, Prefix),
+    atom_string(Op, Name),
+    sub_string(Name, 0, _, _, Prefix),
     swipl_debug_adapter_operator_completion(Associativity, Op, Label, Text, Type).
 
 
@@ -767,10 +775,10 @@ code_token_prefix_at(_, T, N) -->
 
 continuation_at(atom, Codes0, atom(Prefix), 0) -->
     !,
-    {   reverse(Codes0, Codes), atom_codes(Prefix, Codes)   }.
+    {   reverse(Codes0, Codes), string_codes(Prefix, Codes)   }.
 continuation_at(var, Codes0, var(Prefix), 0) -->
     !,
-    {   reverse(Codes0, Codes), atom_codes(Prefix, Codes)   }.
+    {   reverse(Codes0, Codes), string_codes(Prefix, Codes)   }.
 continuation_at(Kind, Codes, T, N) -->
     [C],
     {   P is N - 1   },
@@ -787,7 +795,7 @@ code_continuation_at(_Kind, C, _Codes, T, N) -->
 
 symbol_at(Codes0, symbol(Prefix), 0) -->
     !,
-    {   reverse(Codes0, Codes), atom_codes(Prefix, Codes)   }.
+    {   reverse(Codes0, Codes), string_codes(Prefix, Codes)   }.
 symbol_at(Codes, T, N) -->
     [C],
     {   P is N - 1   },
@@ -819,15 +827,6 @@ swipl_debug_adapter_stopped_reason(call        , F, _            , _{reason:"fun
     ),
     !.
 swipl_debug_adapter_stopped_reason(_           , _, _            , _{reason:trace}).
-
-
-swipl_debug_adapter_loop(Port, Frame, Choice, Action, Handle) :-
-    thread_get_message(Message),
-    swipl_debug_adapter_handle_message(Message, Port, Frame, Choice, Action0, Handle),
-    (   Action0 == loop
-    ->  swipl_debug_adapter_loop(Port, Frame, Choice, Action, Handle)
-    ;   Action  = Action0
-    ).
 
 
 swipl_debug_adapter_tracer_yield(skip) :-
