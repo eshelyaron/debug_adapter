@@ -350,6 +350,12 @@ indexed_argument_name(I, N) :-
 da_term_factorized(Var, 0, Name) :-
     var(Var), format(string(Name), "~w", [Var]),
     !.
+da_term_factorized([], 0, "[]") :- !.
+da_term_factorized(List, Ref, "[...]") :-
+    is_list(List),
+    !,
+    da_tracer_cached_compound_arguments(List, Ref0),
+    Ref is (Ref0 << 2) + 2.
 da_term_factorized(Compound, Ref, Name) :-
     compound(Compound),
     !,
