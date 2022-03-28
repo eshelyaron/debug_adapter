@@ -1,3 +1,38 @@
+# What's new in SWI-Prolog Debug Adapter version 0.7.2
+
+The following changes were introduced since version 0.7.1 of the
+`debug_adapter` package:
+
+## Runtime aware completions
+
+The SWI-Prolog Debug Adapter server now supports the
+[`completions`](https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Completions)
+DAP request, which is used by IDE clients to provide completion
+suggestions for user input based on the current state of the Prolog
+runtime.
+
+In `dap-mode`, the provided completions are used in the DAP REPL:
+![completions](gallery/completions.png)
+
+Note how in the image above completions suggestions appears for
+variable names, but only for those variables that are currently
+accessible in the selected Prolog execution frame, as evaluation in
+the DAP REPL takes place in the context of the paused Prolog
+execution.
+
+## Special handling for proper lists in `variables` requests
+
+Prior to this version, the DAP server treated Prolog lists just like
+any other compound term (of arity 2) when it came to reporting
+variable bindings etc., which caused lists to be presented to the user
+as a deeply nested `'[|]'/2` compound term.
+
+Version 0.7.2 adds a special case for proper lists and reports them a
+flat list in the DAP encoding, which is reflected accordingly to the
+user. For improper lists, the old behavior is retained and they are
+reported as nested binary compound terms, which they are.
+
+
 # What's new in SWI-Prolog Debug Adapter version 0.7.1
 
 The following changes were introduced since version 0.7.0 of the
